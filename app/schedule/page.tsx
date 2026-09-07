@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { useSearchParams } from "next/navigation";
 import * as XLSX from "xlsx";
 import { AppShell } from "@/components/app-shell";
 import { StatCard } from "@/components/stat-card";
@@ -26,8 +25,6 @@ function dateTimeToIso(date: string, time: string) {
 }
 
 export default function SchedulePage() {
-  const searchParams = useSearchParams();
-  const requestedCycle = searchParams.get("cycle") || "";
   const [cycles, setCycles] = useState<Cycle[]>([]);
   const [cycleId, setCycleId] = useState("");
   const [units, setUnits] = useState<Unit[]>([]);
@@ -44,6 +41,7 @@ export default function SchedulePage() {
   useEffect(() => {
     let cancelled = false;
     async function loadInitial() {
+      const requestedCycle = new URLSearchParams(window.location.search).get("cycle") || "";
       const supabase = createSupabaseBrowserClient();
       const [cyclesRes, unitsRes, accountsRes] = await Promise.all([
         supabase.from("cycles").select("id,name,status,interview_duration_minutes").order("starts_on", { ascending: false }),
@@ -70,7 +68,7 @@ export default function SchedulePage() {
     }
     loadInitial();
     return () => { cancelled = true; };
-  }, [requestedCycle]);
+  }, []);
 
   useEffect(() => {
     if (!cycleId) return;
