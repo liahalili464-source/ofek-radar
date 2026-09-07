@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
+import * as XLSX from "xlsx";
 import { AppShell } from "@/components/app-shell";
 import { StatCard } from "@/components/stat-card";
 import { createSupabaseBrowserClient } from "@/lib/supabase-client";
@@ -11,7 +13,6 @@ type Unit = { id: string; name: string; code: string | null };
 type UnitAccount = { id: string; unit_id: string | null };
 type CandidateJoin = { candidate_id: string; candidates: { id: string; full_name: string; national_id: string } | { id: string; full_name: string; national_id: string }[] | null };
 type Candidate = { id: string; fullName: string; nationalId: string };
-
 type ExistingCycleUnit = { unit_id: string };
 type ExistingDay = { interview_date: string; starts_at: string; ends_at: string };
 
@@ -25,6 +26,8 @@ function dateTimeToIso(date: string, time: string) {
 }
 
 export default function SchedulePage() {
+  const searchParams = useSearchParams();
+  const requestedCycle = searchParams.get("cycle") || "";
   const [cycles, setCycles] = useState<Cycle[]>([]);
   const [cycleId, setCycleId] = useState("");
   const [units, setUnits] = useState<Unit[]>([]);
@@ -57,14 +60,17 @@ export default function SchedulePage() {
         setCycles(cycleRows);
         setUnits((unitsRes.data || []) as Unit[]);
         setAccounts((accountsRes.data || []) as UnitAccount[]);
-        const preferred = cycleRows.find((c) => c.status === "active") || cycleRows.find((c) => c.status === "draft") || cycleRows[0];
+        const preferred = cycleRows.find((c) => c.id === requestedCycle)
+          || cycleRows.find((c) => c.status === "active")
+          || cycleRows.find((c) => c.status === "draft")
+          || cycleRows[0];
         setCycleId(preferred?.id || "");
         if (!preferred) setLoading(false);
       }
     }
     loadInitial();
     return () => { cancelled = true; };
-  }, []);
+  }, [requestedCycle]);
 
   useEffect(() => {
     if (!cycleId) return;
@@ -155,6 +161,22 @@ export default function SchedulePage() {
     setSaved(false);
   }
 
+  function exportExcel() {
+    if (!schedule.length) return;
+    const rows = schedule.map((item) => ({
+      תאריך: item.date,
+      התחלה: item.start,
+      סיום: item.end,
+      יחידה: unitNameById.get(item.unit) || item.unit,
+      מועמד: candidateNameById.get(item.candidate) || item.candidate,
+    }));
+    const worksheet = XLSX.utils.json_to_sheet(rows);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "לוח ראיונות");
+    const cycleName = cycles.find((c) => c.id === cycleId)?.name || "interviews";
+    XLSX.writeFile(workbook, `${cycleName.replace(/[\\/:*?"<>|]/g, "-")}.xlsx`);
+  }
+
   async function saveSchedule() {
     if (!cycleId || !schedule.length || !validation?.valid) return;
     const unitsWithoutAccount = selectedUnits.filter((u) => !accountByUnit.has(u.id));
@@ -167,6 +189,17 @@ export default function SchedulePage() {
     setError("");
     try {
       const supabase = createSupabaseBrowserClient();
+      const { count: completedCount, error: completedError } = await supabase
+        .from("interviews")
+        .select("id", { count: "exact", head: true })
+        .eq("cycle_id", cycleId)
+        .eq("status", "completed");
+      if (completedError) throw completedError;
+      if ((completedCount || 0) > 0) throw new Error("לא ניתן ליצור מחדש את הלוח לאחר שכבר הושלמו ראיונות במחזור.");
+
+      const { error: deleteInterviewsError } = await supabase.from("interviews").delete().eq("cycle_id", cycleId);
+      if (deleteInterviewsError) throw deleteInterviewsError;
+
       const { error: deleteUnitsError } = await supabase.from("cycle_units").delete().eq("cycle_id", cycleId);
       if (deleteUnitsError) throw deleteUnitsError;
       const { error: insertUnitsError } = await supabase.from("cycle_units").insert(selectedUnits.map((u) => ({ cycle_id: cycleId, unit_id: u.id, interviewer_id: accountByUnit.get(u.id) })));
@@ -178,6 +211,7 @@ export default function SchedulePage() {
         const { error: insertDaysError } = await supabase.from("interview_days").insert(days.map((d) => ({ cycle_id: cycleId, interview_date: d.date, starts_at: d.start, ends_at: d.end })));
         if (insertDaysError) throw insertDaysError;
       }
+
       const { error: cycleUpdateError } = await supabase.from("cycles").update({ interview_duration_minutes: duration }).eq("id", cycleId);
       if (cycleUpdateError) throw cycleUpdateError;
 
@@ -189,7 +223,11 @@ export default function SchedulePage() {
         startsAt: dateTimeToIso(item.date, item.start),
         endsAt: dateTimeToIso(item.date, item.end),
       }));
-      const response = await fetch("/api/admin/schedule", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ interviews: payload }) });
+      const response = await fetch("/api/admin/schedule", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ interviews: payload }),
+      });
       const json = await response.json();
       if (!response.ok) throw new Error(json.error || "שמירת הלוז נכשלה");
       setSaved(true);
@@ -201,7 +239,9 @@ export default function SchedulePage() {
   }
 
   return (
-    <AppShell title="שיבוץ ראיונות" subtitle="בחירת מחזור ויחידות בפועל, בדיקת קיבולת ויצירת לו״ז ללא התנגשויות">
+    <AppShell title="שיבוץ ראיונות" subtitle="בחירת מחזור ויחידות, בדיקת קיבולת ויצירת לו״ז ללא התנגשויות">
+      {error && <div className="notice danger" style={{ marginBottom: 18 }}>{error}</div>}
+
       <section className="card" style={{ marginBottom: 18 }}>
         <div className="grid grid-3">
           <div className="field"><label>מחזור</label><select className="select" value={cycleId} onChange={(e) => setCycleId(e.target.value)}>{cycles.length === 0 && <option value="">אין מחזורים</option>}{cycles.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}</select></div>
@@ -211,20 +251,20 @@ export default function SchedulePage() {
       </section>
 
       <section className="card" style={{ marginBottom: 18 }}>
-        <div className="row between"><div><h2 className="section-title" style={{ marginBottom: 4 }}>יחידות פעילות במחזור</h2><div className="stat-label">סמני בדיוק אילו יחידות משתתפות במחזור הזה. הלוז ייבנה רק עבורן.</div></div><span className="badge">{selectedUnits.length} נבחרו</span></div>
+        <div className="row between"><div><h2 className="section-title" style={{ marginBottom: 4 }}>יחידות במחזור</h2><div className="stat-label">סמני בדיוק אילו יחידות משתתפות. כל מועמד/ת יפגוש/תפגוש כל יחידה שנבחרה.</div></div><span className="badge">{selectedUnits.length} נבחרו</span></div>
         <div className="grid grid-4" style={{ marginTop: 14 }}>
           {units.map((unit) => {
             const hasAccount = accountByUnit.has(unit.id);
-            return <label className="notice checkbox-row" key={unit.id} style={{ opacity: hasAccount ? 1 : .6 }}>
+            return <label className="notice checkbox-row" key={unit.id} style={{ opacity: hasAccount ? 1 : .55 }}>
               <input type="checkbox" checked={selectedUnitIds.includes(unit.id)} disabled={!hasAccount} onChange={() => toggleUnit(unit.id)} />
-              <span><b>{unit.name}</b><div className="stat-label">{hasAccount ? "חשבון יחידה מחובר" : "חסר חשבון יחידה"}</div></span>
+              <span><b>{unit.name}</b><div className="stat-label">{hasAccount ? "חשבון יחידה פעיל" : "חסר חשבון יחידה"}</div></span>
             </label>;
           })}
         </div>
       </section>
 
       <section className="card" style={{ marginBottom: 18 }}>
-        <div className="row between"><div><h2 className="section-title" style={{ marginBottom: 4 }}>ימי ראיונות</h2><div className="stat-label">אפשר לשנות תאריך ושעות. כרגע הפסקת 12:30–13:00 לא נספרת כסלוט.</div></div><button className="btn btn-small" onClick={addDay}>+ הוספת יום</button></div>
+        <div className="row between"><div><h2 className="section-title" style={{ marginBottom: 4 }}>ימי ראיונות</h2><div className="stat-label">הפסקת 12:30–13:00 אינה נחשבת כסלוט.</div></div><button className="btn btn-small" onClick={addDay}>+ הוספת יום</button></div>
         <div className="grid grid-3" style={{ marginTop: 14 }}>
           {days.map((day, index) => <div className="notice" key={`${day.date}-${index}`}>
             <div className="grid grid-3">
@@ -240,30 +280,27 @@ export default function SchedulePage() {
 
       <div className="grid grid-4" style={{ marginBottom: 18 }}>
         <StatCard label="סה״כ ראיונות" value={report.totalInterviews} />
-        <StatCard label="סלוטים מקבילים נדרשים" value={report.requiredRounds} />
+        <StatCard label="סלוטים נדרשים" value={report.requiredRounds} />
         <StatCard label="סלוטים זמינים" value={report.availableRounds} accent />
-        <StatCard label="מצב" value={<span style={{ fontSize: 21, color: report.canGenerate ? "var(--success)" : "var(--danger)" }}>{report.canGenerate ? "אפשר לשבץ" : "אין קיבולת"}</span>} />
+        <StatCard label="מצב" value={<span style={{ fontSize: 21, color: report.canGenerate ? "var(--success)" : "var(--warning)" }}>{report.canGenerate ? "אפשר לשבץ" : "נדרשות התאמות"}</span>} />
       </div>
 
-      {loading && <div className="notice" style={{ marginBottom: 18 }}>טוען נתוני מחזור...</div>}
-      {error && <div className="notice danger" style={{ marginBottom: 18 }}>{error}</div>}
-      {!loading && !report.canGenerate && <div className="notice danger" style={{ marginBottom: 18 }}><b>לא ניתן לייצר לוז כרגע.</b><div className="stat-label" style={{ marginTop: 5 }}>{!candidates.length ? "אין מועמדים במחזור. " : ""}{!selectedUnits.length ? "לא נבחרו יחידות. " : ""}{days.length && report.missingRounds ? `חסרים ${report.missingRounds} סלוטים.` : !days.length ? "לא הוגדרו ימי ראיונות." : ""}</div></div>}
-      {!loading && report.canGenerate && <div className="notice success" style={{ marginBottom: 18 }}><b>✓ אפשר לייצר לוח תקין.</b> {validation?.valid ? `כל ${report.totalInterviews} הראיונות נוצרו ללא כפילויות או התנגשויות.` : ""}</div>}
+      {!loading && candidates.length === 0 && <div className="notice warning" style={{ marginBottom: 18 }}>אין מועמדים במחזור הזה. יש לייבא מועמדים לפני יצירת לוח.</div>}
+      {!report.canGenerate && candidates.length > 0 && selectedUnits.length > 0 && <div className="notice warning" style={{ marginBottom: 18 }}>חסרים {report.missingRounds} סלוטים. הוסיפי ימים, האריכי שעות או קצרי את משך הראיון.</div>}
 
       {!!schedule.length && (
         <section className="card">
-          <div className="row between" style={{ marginBottom: 16 }}>
-            <div><h2 className="section-title" style={{ marginBottom: 4 }}>תצוגה מקדימה של הלוז</h2><div className="stat-label">{candidates.length} מועמדים × {selectedUnits.length} יחידות = {report.totalInterviews} ראיונות</div></div>
-            <button className="btn btn-primary" disabled={saving} onClick={saveSchedule}>{saving ? "שומר..." : "אישור ושמירת הלוז"}</button>
+          <div className="row between wrap" style={{ marginBottom: 16 }}>
+            <div><h2 className="section-title" style={{ marginBottom: 4 }}>תצוגה מקדימה של הלוז</h2><div className="stat-label">{schedule.length} ראיונות · ללא חפיפה למועמד/ת או ליחידה</div></div>
+            <div className="row wrap"><button className="btn" onClick={exportExcel}>ייצוא Excel</button><button className="btn btn-primary" disabled={saving || !validation?.valid} onClick={saveSchedule}>{saving ? "שומר..." : "אישור ושמירת הלוז"}</button></div>
           </div>
           <div className="grid">
-            {grouped.slice(0, 12).map(([key, meetings]) => {
+            {grouped.map(([key, meetings]) => {
               const [date, start, end] = key.split("|");
               return <div className="schedule-slot" key={key}><div className="schedule-slot-head"><span>{date}</span><span>{start}–{end}</span></div><div className="schedule-grid">{meetings.map((m) => <div className="schedule-meeting" key={`${m.unit}-${m.candidate}`}><b>{unitNameById.get(m.unit) || m.unit}</b><div style={{ marginTop: 4 }}>{candidateNameById.get(m.candidate) || m.candidate}</div></div>)}</div></div>;
             })}
           </div>
-          {grouped.length > 12 && <div className="stat-label" style={{ marginTop: 12 }}>מוצגים 12 הסלוטים הראשונים מתוך {grouped.length}. כל הלוז יישמר.</div>}
-          {saved && <div className="notice success" style={{ marginTop: 14 }}>✓ הלוז נשמר במערכת ויופיע בצד של חשבונות היחידות הרלוונטיות.</div>}
+          {saved && <div className="notice success" style={{ marginTop: 14 }}>✓ הלוח נשמר ויופיע בחשבונות היחידות.</div>}
         </section>
       )}
     </AppShell>
