@@ -158,8 +158,8 @@ export function ExcelImporter({ onImport }: { onImport?: (rows: NormalizedCandid
           </div>
 
           <div className="row" style={{ marginTop: 14 }}>
-            <button className="btn btn-primary" disabled={!validation || !!validation.missingRequiredMappings.length} onClick={importRows}>ייבוא {validation?.valid.length ?? 0} מועמדים</button>
-            {imported && <span className="badge ok">✓ הייבוא נשמר בדמו</span>}
+            <button className="btn btn-primary" disabled={!validation || !!validation.missingRequiredMappings.length} onClick={importRows}>אישור {validation?.valid.length ?? 0} מועמדים</button>
+            {imported && <span className="badge ok">✓ הקובץ מוכן לשמירה במחזור</span>}
           </div>
         </>
       )}
