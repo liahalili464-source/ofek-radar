@@ -2,27 +2,40 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
+import { useEffect, useMemo, useState } from "react";
 import {
   CalendarDays,
   ClipboardList,
   FileQuestion,
   LayoutDashboard,
+  LogOut,
   Settings,
   Users,
   UserRoundSearch,
 } from "lucide-react";
 import { ThemeToggle } from "./theme-toggle";
+import { createSupabaseBrowserClient } from "@/lib/supabase-client";
 
-const nav = [
+const adminNav = [
   { href: "/cycles", label: "מחזורי ראיונות", icon: LayoutDashboard },
   { href: "/candidates", label: "מועמדים", icon: Users },
   { href: "/schedule", label: "שיבוץ ראיונות", icon: CalendarDays },
   { href: "/questionnaire", label: "שאלון", icon: FileQuestion },
-  { href: "/users", label: "ניהול משתמשים", icon: UserRoundSearch },
-  { href: "/interviewer", label: "הראיונות שלי", icon: ClipboardList },
+  { href: "/users", label: "יחידות והרשאות", icon: UserRoundSearch },
   { href: "/settings", label: "הגדרות", icon: Settings },
 ];
+
+const interviewerNav = [
+  { href: "/interviewer", label: "הראיונות שלי", icon: ClipboardList },
+];
+
+type Viewer = {
+  username: string;
+  fullName: string;
+  role: "admin" | "interviewer";
+  unitName: string | null;
+};
 
 export function AppShell({
   children,
@@ -36,15 +49,64 @@ export function AppShell({
   actions?: React.ReactNode;
 }) {
   const path = usePathname();
+  const router = useRouter();
+  const [viewer, setViewer] = useState<Viewer | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function loadViewer() {
+      const supabase = createSupabaseBrowserClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user || cancelled) return;
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("username,full_name,role,unit_id")
+        .eq("id", user.id)
+        .single();
+      if (!profile || cancelled) return;
+
+      let unitName: string | null = null;
+      if (profile.unit_id) {
+        const { data: unit } = await supabase.from("units").select("name").eq("id", profile.unit_id).single();
+        unitName = unit?.name ?? null;
+      }
+      if (!cancelled) {
+        setViewer({
+          username: profile.username,
+          fullName: profile.full_name,
+          role: profile.role,
+          unitName,
+        });
+      }
+    }
+    loadViewer();
+    return () => { cancelled = true; };
+  }, []);
+
+  const nav = viewer?.role === "interviewer" ? interviewerNav : adminNav;
+  const homeHref = viewer?.role === "interviewer" ? "/interviewer" : "/cycles";
+  const displayName = viewer?.role === "interviewer"
+    ? (viewer.unitName || viewer.fullName || viewer.username)
+    : (viewer?.fullName || "מדור איתור ומיון");
+  const displaySub = viewer?.role === "interviewer" ? "חשבון יחידה" : "מדור איתור ומיון";
+  const initials = useMemo(() => displayName.split(/\s+/).filter(Boolean).slice(0, 2).map((x) => x[0]).join(""), [displayName]);
+
+  async function logout() {
+    const supabase = createSupabaseBrowserClient();
+    await supabase.auth.signOut();
+    router.push("/login");
+    router.refresh();
+  }
+
   return (
     <div className="shell">
       <aside className="sidebar">
-        <Link href="/cycles" aria-label="OFEK RADAR home">
+        <Link href={homeHref} aria-label="OFEK RADAR home">
           <Image className="logo" src="/ofek-radar-logo.png" alt="OFEK RADAR" width={632} height={223} priority />
         </Link>
         <nav className="nav">
           {nav.map(({ href, label, icon: Icon }) => {
-            const active = path === href || (href !== "/cycles" && path.startsWith(`${href}/`)) || (href === "/cycles" && path.startsWith("/cycles"));
+            const active = path === href || path.startsWith(`${href}/`);
             return (
               <Link key={href} href={href} className={active ? "active" : ""}>
                 <Icon size={18} strokeWidth={1.8} />
@@ -53,12 +115,13 @@ export function AppShell({
             );
           })}
         </nav>
-        <div className="sidebar-footer">
-          <div className="sidebar-user-avatar">רכ</div>
-          <div>
-            <b>רותם כהן</b>
-            <div>מדור איתור ומיון</div>
+        <div className="sidebar-footer" style={{ gap: 10 }}>
+          <div className="sidebar-user-avatar">{initials || "OR"}</div>
+          <div style={{ minWidth: 0, flex: 1 }}>
+            <b>{displayName}</b>
+            <div>{displaySub}</div>
           </div>
+          <button className="btn btn-small" onClick={logout} title="התנתקות" aria-label="התנתקות"><LogOut size={15} /></button>
         </div>
       </aside>
 
