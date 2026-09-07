@@ -4,7 +4,7 @@ import { createSupabaseAdminClient, requireAdmin } from "@/lib/supabase-server";
 export async function GET() {
   try {
     const { supabase } = await requireAdmin();
-    const { data, error } = await supabase.from("profiles").select("id,username,full_name,role,active,unit_id,units(name)").order("full_name");
+    const { data, error } = await supabase.from("profiles").select("id,username,full_name,role,active,unit_id,units(name)").order("role").order("username");
     if (error) throw error;
     return NextResponse.json({ users: data });
   } catch (error) {
@@ -35,6 +35,28 @@ export async function POST(request: Request) {
       throw profileError;
     }
     return NextResponse.json({ id: data.user.id, username, fullName, role, unitId }, { status: 201 });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "ERROR";
+    return NextResponse.json({ error: message }, { status: message === "UNAUTHORIZED" ? 401 : message === "FORBIDDEN" ? 403 : 500 });
+  }
+}
+
+export async function PATCH(request: Request) {
+  try {
+    const { supabase, user } = await requireAdmin();
+    const body = await request.json();
+    const id = String(body.id || "");
+    if (!id || typeof body.active !== "boolean") return NextResponse.json({ error: "INVALID_INPUT" }, { status: 400 });
+    if (id === user.id && body.active === false) return NextResponse.json({ error: "CANNOT_DISABLE_SELF" }, { status: 400 });
+
+    const { data, error } = await supabase
+      .from("profiles")
+      .update({ active: body.active })
+      .eq("id", id)
+      .select("id,active")
+      .single();
+    if (error) throw error;
+    return NextResponse.json({ user: data });
   } catch (error) {
     const message = error instanceof Error ? error.message : "ERROR";
     return NextResponse.json({ error: message }, { status: message === "UNAUTHORIZED" ? 401 : message === "FORBIDDEN" ? 403 : 500 });
