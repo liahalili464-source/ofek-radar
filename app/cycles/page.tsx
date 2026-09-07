@@ -29,7 +29,7 @@ type CycleView = CycleRow & {
 const statusLabel: Record<CycleRow["status"], string> = {
   draft: "בתכנון",
   active: "פעיל",
-  completed: "הושלם",
+  completed: "סגור",
   archived: "ארכיון",
 };
 
@@ -107,14 +107,14 @@ export default function CyclesPage() {
   return (
     <AppShell
       title="מחזורי ראיונות"
-      subtitle="ניהול ומעקב אחר כלל מחזורי הראיונות הפעילים והארכיוניים"
+      subtitle="ניהול ומעקב אחר כלל מחזורי הראיונות הפעילים והסגורים"
       actions={<Link href="/cycles/new" className="btn btn-primary"><Plus size={17} /> פתיחת מחזור חדש</Link>}
     >
       <div className="grid grid-4" style={{ marginBottom: 24 }}>
         <StatCard label="מחזורים פעילים / בתכנון" value={active} accent />
         <StatCard label="סה״כ מועמדים במחזורים" value={totalCandidates} />
         <StatCard label="ראיונות השבוע" value={weekly} />
-        <StatCard label="מחזורים שהושלמו" value={completed} />
+        <StatCard label="מחזורים סגורים" value={completed} />
       </div>
 
       <div className="toolbar">
@@ -123,7 +123,7 @@ export default function CyclesPage() {
           <option value="all">סטטוס: הכל</option>
           <option value="active">פעיל</option>
           <option value="draft">בתכנון</option>
-          <option value="completed">הושלם</option>
+          <option value="completed">סגור</option>
           <option value="archived">ארכיון</option>
         </select>
         <select className="select" style={{ maxWidth: 160 }} value={year} onChange={(e) => setYear(e.target.value)}>
