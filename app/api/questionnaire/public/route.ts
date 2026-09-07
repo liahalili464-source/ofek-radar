@@ -26,54 +26,86 @@ type Question = {
   maps_to_candidate_field: string | null;
 };
 
+type Membership = {
+  cycle_id: string;
+  status: string;
+};
+
+type ResolveSuccess = {
+  ok: true;
+  supabase: ReturnType<typeof createSupabaseAdminClient>;
+  candidate: Candidate;
+  cycle: Cycle;
+  membership: Membership;
+  questionnaire: {
+    id: string;
+    title: string;
+    active_version: number;
+  };
+  questions: Question[];
+};
+
+type ResolveFailure = {
+  ok: false;
+  error: "CANDIDATE_NOT_FOUND" | "NO_ACTIVE_CYCLE" | "CANDIDATE_NOT_IN_ACTIVE_CYCLE" | "QUESTIONNAIRE_NOT_FOUND";
+};
+
+type ResolveResult = ResolveSuccess | ResolveFailure;
+
 function normalizeNationalId(value: unknown) {
   return String(value ?? "").replace(/\D/g, "");
 }
 
-async function resolveCandidate(nationalId: string) {
+async function resolveCandidate(nationalId: string): Promise<ResolveResult> {
   const supabase = createSupabaseAdminClient();
 
-  const { data: candidate, error: candidateError } = await supabase
+  const { data: candidateData, error: candidateError } = await supabase
     .from("candidates")
     .select("id,national_id,full_name,phone,city")
     .eq("national_id", nationalId)
     .maybeSingle();
 
   if (candidateError) throw candidateError;
-  if (!candidate) return { error: "CANDIDATE_NOT_FOUND" as const };
+  if (!candidateData) return { ok: false, error: "CANDIDATE_NOT_FOUND" };
+  const candidate = candidateData as Candidate;
 
-  const { data: activeCycles, error: cyclesError } = await supabase
+  const { data: activeCycleData, error: cyclesError } = await supabase
     .from("cycles")
     .select("id,name,starts_on")
     .eq("status", "active")
     .order("starts_on", { ascending: false });
 
   if (cyclesError) throw cyclesError;
-  if (!activeCycles?.length) return { error: "NO_ACTIVE_CYCLE" as const };
+  const activeCycles = (activeCycleData || []) as Cycle[];
+  if (!activeCycles.length) return { ok: false, error: "NO_ACTIVE_CYCLE" };
 
   const cycleIds = activeCycles.map((cycle) => cycle.id);
-  const { data: memberships, error: membershipsError } = await supabase
+  const { data: membershipData, error: membershipsError } = await supabase
     .from("cycle_candidates")
     .select("cycle_id,status")
     .eq("candidate_id", candidate.id)
     .in("cycle_id", cycleIds);
 
   if (membershipsError) throw membershipsError;
-  const membershipByCycle = new Map((memberships || []).map((m) => [m.cycle_id, m]));
-  const cycle = activeCycles.find((item) => membershipByCycle.has(item.id)) as Cycle | undefined;
-  if (!cycle) return { error: "CANDIDATE_NOT_IN_ACTIVE_CYCLE" as const };
+  const memberships = (membershipData || []) as Membership[];
+  const membershipByCycle = new Map(memberships.map((membership) => [membership.cycle_id, membership]));
+  const cycle = activeCycles.find((item) => membershipByCycle.has(item.id));
+  if (!cycle) return { ok: false, error: "CANDIDATE_NOT_IN_ACTIVE_CYCLE" };
 
-  const membership = membershipByCycle.get(cycle.id)!;
-  const { data: questionnaire, error: questionnaireError } = await supabase
+  const membership = membershipByCycle.get(cycle.id);
+  if (!membership) return { ok: false, error: "CANDIDATE_NOT_IN_ACTIVE_CYCLE" };
+
+  const { data: questionnaireData, error: questionnaireError } = await supabase
     .from("questionnaires")
     .select("id,title,active_version")
     .eq("cycle_id", cycle.id)
     .maybeSingle();
 
   if (questionnaireError) throw questionnaireError;
-  if (!questionnaire) return { error: "QUESTIONNAIRE_NOT_FOUND" as const };
+  if (!questionnaireData) return { ok: false, error: "QUESTIONNAIRE_NOT_FOUND" };
+  const questionnaire = questionnaireData as ResolveSuccess["questionnaire"];
 
-  const { data: questions, error: questionsError } = await supabase
+  const { data: questionData, error: questionsError } = await supabase
     .from("questionnaire_questions")
     .select("id,field_key,label,field_type,required,options,position,maps_to_candidate_field")
     .eq("questionnaire_id", questionnaire.id)
@@ -83,12 +115,13 @@ async function resolveCandidate(nationalId: string) {
   if (questionsError) throw questionsError;
 
   return {
+    ok: true,
     supabase,
-    candidate: candidate as Candidate,
+    candidate,
     cycle,
     membership,
     questionnaire,
-    questions: (questions || []) as Question[],
+    questions: (questionData || []) as Question[],
   };
 }
 
@@ -104,7 +137,7 @@ export async function POST(request: Request) {
     if (nationalId.length < 5) return responseForError("INVALID_NATIONAL_ID");
 
     const resolved = await resolveCandidate(nationalId);
-    if ("error" in resolved) return responseForError(resolved.error);
+    if (!resolved.ok) return responseForError(resolved.error);
 
     const { supabase, candidate, cycle, membership, questionnaire, questions } = resolved;
 
@@ -118,7 +151,11 @@ export async function POST(request: Request) {
         .maybeSingle();
       if (responseError) throw responseError;
 
-      const prefill: Record<string, unknown> = { ...(existingResponse?.answers || {}) };
+      const storedAnswers = existingResponse?.answers;
+      const prefill: Record<string, unknown> = storedAnswers && typeof storedAnswers === "object" && !Array.isArray(storedAnswers)
+        ? { ...(storedAnswers as Record<string, unknown>) }
+        : {};
+
       const candidateValues: Record<string, unknown> = {
         full_name: candidate.full_name,
         national_id: candidate.national_id,
