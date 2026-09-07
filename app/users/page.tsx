@@ -55,14 +55,7 @@ export default function UsersPage() {
   const admins = accounts.filter((a) => a.role === "admin");
 
   return (
-    <AppShell title="יחידות והרשאות" subtitle="חשבונות הכניסה הקבועים הם של היחידות. שם המראיין בפועל נקבע בנפרד בכל מחזור.">
-      <section className="card" style={{ marginBottom: 18 }}>
-        <h2 className="section-title">איך זה עובד</h2>
-        <div className="notice">
-          לכל יחידה יש חשבון קבוע אחד למערכת. לדוגמה, חשבון <b>handasa</b> שייך ליחידת הנדסה — לא לאדם מסוים. במחזור עצמו אפשר יהיה לרשום ידנית מי המראיין/ת בפועל באותו מחזור, בלי ליצור יוזר חדש בכל פעם.
-        </div>
-      </section>
-
+    <AppShell title="יחידות והרשאות" subtitle="ניהול חשבונות היחידות והרשאות הגישה למערכת">
       {error && <div className="notice danger" style={{ marginBottom: 16 }}>{error}</div>}
 
       <section className="card flush" style={{ marginBottom: 18 }}>
