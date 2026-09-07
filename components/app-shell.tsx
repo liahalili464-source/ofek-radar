@@ -10,7 +10,6 @@ import {
   FileQuestion,
   LayoutDashboard,
   LogOut,
-  Settings,
   Users,
   UserRoundSearch,
 } from "lucide-react";
@@ -23,7 +22,6 @@ const adminNav = [
   { href: "/schedule", label: "שיבוץ ראיונות", icon: CalendarDays },
   { href: "/questionnaire", label: "שאלון", icon: FileQuestion },
   { href: "/users", label: "יחידות והרשאות", icon: UserRoundSearch },
-  { href: "/settings", label: "הגדרות", icon: Settings },
 ];
 
 const interviewerNav = [
