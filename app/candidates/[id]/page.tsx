@@ -23,7 +23,6 @@ type Interview = { id: string; starts_at: string; ends_at: string; status: strin
 type Evaluation = { interview_id: string; professional_score: number | null; personal_score: number | null; recommendation: string | null; notes: string | null; submitted_at: string; };
 type QuestionnaireResponse = { questionnaire_id: string; version: number; answers: Record<string, unknown>; submitted_at: string };
 type Question = { field_key: string; label: string; position: number };
-type QuestionnaireLink = { token: string; submitted_at: string | null; expires_at: string | null };
 
 function one<T>(value: T | T[] | null): T | null {
   if (!value) return null;
@@ -52,7 +51,7 @@ function interviewStatus(status: string) {
 function cycleStatus(status: string) {
   if (status === "active") return "פעיל";
   if (status === "draft") return "בתכנון";
-  if (status === "completed") return "הושלם";
+  if (status === "completed") return "סגור";
   if (status === "archived") return "ארכיון";
   return status;
 }
@@ -74,9 +73,6 @@ export default function CandidatePage({ params }: { params: Promise<{ id: string
   const [evaluations, setEvaluations] = useState<Evaluation[]>([]);
   const [response, setResponse] = useState<QuestionnaireResponse | null>(null);
   const [questions, setQuestions] = useState<Question[]>([]);
-  const [questionnaireLink, setQuestionnaireLink] = useState<QuestionnaireLink | null>(null);
-  const [linkBusy, setLinkBusy] = useState(false);
-  const [copied, setCopied] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -117,14 +113,12 @@ export default function CandidatePage({ params }: { params: Promise<{ id: string
     async function loadCycleData() {
       setLoading(true);
       setError("");
-      setCopied(false);
       const supabase = createSupabaseBrowserClient();
-      const [interviewsRes, responseRes, linkRes] = await Promise.all([
+      const [interviewsRes, responseRes] = await Promise.all([
         supabase.from("interviews").select("id,starts_at,ends_at,status,location,unit_id,units(name)").eq("candidate_id", id).eq("cycle_id", cycleId).order("starts_at"),
         supabase.from("questionnaire_responses").select("questionnaire_id,version,answers,submitted_at").eq("candidate_id", id).eq("cycle_id", cycleId).maybeSingle(),
-        supabase.from("questionnaire_links").select("token,submitted_at,expires_at").eq("candidate_id", id).eq("cycle_id", cycleId).order("created_at", { ascending: false }).limit(1).maybeSingle(),
       ]);
-      const firstError = interviewsRes.error || responseRes.error || linkRes.error;
+      const firstError = interviewsRes.error || responseRes.error;
       if (firstError) {
         if (!cancelled) { setError(firstError.message); setLoading(false); }
         return;
@@ -156,7 +150,6 @@ export default function CandidatePage({ params }: { params: Promise<{ id: string
         setEvaluations((evaluationRes.data || []) as Evaluation[]);
         setResponse(questionnaireResponse);
         setQuestions(questionRows);
-        setQuestionnaireLink((linkRes.data as QuestionnaireLink | null) || null);
         setLoading(false);
       }
     }
@@ -174,45 +167,6 @@ export default function CandidatePage({ params }: { params: Promise<{ id: string
     const order = new Map(questions.map((q, i) => [q.field_key, i]));
     return Object.entries(response.answers || {}).map(([key, value]) => ({ key, label: labels.get(key) || key, value, order: order.get(key) ?? 9999 })).sort((a, b) => a.order - b.order);
   }, [questions, response]);
-
-  async function ensureQuestionnaireLink() {
-    if (!candidate || !cycleId) return null;
-    if (questionnaireLink && !questionnaireLink.submitted_at) return questionnaireLink;
-    setLinkBusy(true);
-    setError("");
-    try {
-      const supabase = createSupabaseBrowserClient();
-      const { data, error: insertError } = await supabase.from("questionnaire_links")
-        .insert({ cycle_id: cycleId, candidate_id: candidate.id })
-        .select("token,submitted_at,expires_at")
-        .single();
-      if (insertError || !data) throw insertError || new Error("יצירת הקישור נכשלה");
-      const created = data as QuestionnaireLink;
-      setQuestionnaireLink(created);
-      return created;
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "יצירת הקישור נכשלה");
-      return null;
-    } finally {
-      setLinkBusy(false);
-    }
-  }
-
-  async function copyQuestionnaireLink() {
-    const link = await ensureQuestionnaireLink();
-    if (!link) return;
-    const url = `${window.location.origin}/form/${link.token}`;
-    await navigator.clipboard.writeText(url);
-    setCopied(true);
-  }
-
-  async function openWhatsApp() {
-    const link = await ensureQuestionnaireLink();
-    if (!link || !candidate) return;
-    const url = `${window.location.origin}/form/${link.token}`;
-    const text = `שלום ${candidate.full_name}, מצורף קישור למילוי שאלון לקראת תהליך הראיונות: ${url}`;
-    window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, "_blank", "noopener,noreferrer");
-  }
 
   if (loading && !candidate) return <AppShell title="כרטיס מועמד"><div className="notice">טוען כרטיס מועמד...</div></AppShell>;
 
@@ -253,11 +207,10 @@ export default function CandidatePage({ params }: { params: Promise<{ id: string
               </div>
             </section>
             <section className="card">
-              <h2 className="section-title">שאלון למועמד/ת</h2>
-              {response ? <div className="notice success"><b>השאלון הושלם</b><div className="stat-label" style={{ marginTop: 4 }}>{formatDateTime(response.submitted_at)}</div></div> : <>
-                <p className="section-subtitle">קישור אישי שאפשר לשלוח בוואטסאפ. למועמד/ת אין צורך בשם משתמש או סיסמה.</p>
-                <div className="row wrap"><button className="btn btn-primary" disabled={linkBusy} onClick={openWhatsApp}>{linkBusy ? "יוצר קישור..." : "שליחה בוואטסאפ"}</button><button className="btn" disabled={linkBusy} onClick={copyQuestionnaireLink}>העתקת קישור</button>{copied && <span className="badge ok">הועתק</span>}</div>
-              </>}
+              <h2 className="section-title">שאלון</h2>
+              {response
+                ? <div className="notice success"><b>הושלם</b><div className="stat-label" style={{ marginTop: 4 }}>{formatDateTime(response.submitted_at)}</div></div>
+                : <div className="notice warning"><b>ממתין למילוי</b></div>}
             </section>
             <section className="card" style={{ gridColumn: "1 / -1" }}>
               <div className="row between wrap"><h2 className="section-title" style={{ marginBottom: 0 }}>מידע מקובץ המועמדים</h2><span className="badge">{sourceEntries.length} שדות</span></div>
