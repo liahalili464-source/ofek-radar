@@ -10,7 +10,6 @@ type CookieToSet = {
 export async function middleware(request: NextRequest) {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-  // Demo mode: when Supabase is not configured, keep the prototype fully navigable.
   if (!url || !key) return NextResponse.next();
 
   let response = NextResponse.next({ request });
@@ -27,7 +26,12 @@ export async function middleware(request: NextRequest) {
 
   const { data: { user } } = await supabase.auth.getUser();
   const pathname = request.nextUrl.pathname;
-  const publicPath = pathname === "/login" || pathname.startsWith("/form/") || pathname.startsWith("/api/questionnaire/");
+  const publicPath =
+    pathname === "/login" ||
+    pathname === "/form" ||
+    pathname.startsWith("/form/") ||
+    pathname === "/api/questionnaire/public" ||
+    pathname.startsWith("/api/questionnaire/");
 
   if (!user && !publicPath) {
     const redirect = request.nextUrl.clone();
