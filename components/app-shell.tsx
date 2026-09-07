@@ -13,7 +13,6 @@ import {
   Users,
   UserRoundSearch,
 } from "lucide-react";
-import { ThemeToggle } from "./theme-toggle";
 import { createSupabaseBrowserClient } from "@/lib/supabase-client";
 
 const adminNav = [
@@ -133,10 +132,7 @@ export function AppShell({
             <h1>{title}</h1>
             {subtitle && <p>{subtitle}</p>}
           </div>
-          <div className="topbar-actions">
-            {actions}
-            <ThemeToggle />
-          </div>
+          <div className="topbar-actions">{actions}</div>
         </div>
         {children}
       </main>
