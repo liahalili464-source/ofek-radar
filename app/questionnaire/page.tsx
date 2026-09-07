@@ -63,6 +63,7 @@ export default function QuestionnairePage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [linkCopied, setLinkCopied] = useState(false);
   const [error, setError] = useState("");
 
   useEffect(() => {
@@ -239,28 +240,42 @@ export default function QuestionnairePage() {
     }
   }
 
+  async function copyPublicLink() {
+    await navigator.clipboard.writeText(`${window.location.origin}/form`);
+    setLinkCopied(true);
+    window.setTimeout(() => setLinkCopied(false), 1800);
+  }
+
   const displayName = templateMode ? "תבנית השאלון הכללית" : selectedCycle?.name || "מחזור";
 
   return (
     <AppShell
       title="שאלון מועמד"
-      subtitle={templateMode ? "תצוגה של השאלון גם כשאין מחזור פתוח" : `${displayName} · גרסה פעילה ${version}`}
+      subtitle={templateMode ? "תבנית כללית" : `${displayName} · גרסה פעילה ${version}`}
       actions={canEdit ? <button className="btn btn-primary" disabled={saving || loading || !questionnaireId} onClick={saveVersion}><Save size={17} /> {saving ? "שומר..." : "שמירה ופרסום גרסה חדשה"}</button> : undefined}
     >
-      <section className="card" style={{ marginBottom: 18 }}>
-        <div className="field" style={{ marginBottom: 0 }}>
-          <label>איזה שאלון להציג?</label>
-          <select className="select" value={cycleId} onChange={(e) => setCycleId(e.target.value)}>
-            <option value={TEMPLATE_MODE}>תבנית השאלון הכללית</option>
-            {cycles.map((cycle) => <option key={cycle.id} value={cycle.id}>{cycle.name} · {cycleStatusLabel(cycle.status)}</option>)}
-          </select>
-        </div>
-      </section>
+      <div className="grid grid-2" style={{ gridTemplateColumns: "minmax(0,1fr) auto", marginBottom: 18 }}>
+        <section className="card">
+          <div className="field" style={{ marginBottom: 0 }}>
+            <label>שאלון להצגה</label>
+            <select className="select" value={cycleId} onChange={(e) => setCycleId(e.target.value)}>
+              <option value={TEMPLATE_MODE}>תבנית השאלון הכללית</option>
+              {cycles.map((cycle) => <option key={cycle.id} value={cycle.id}>{cycle.name} · {cycleStatusLabel(cycle.status)}</option>)}
+            </select>
+          </div>
+        </section>
+        <section className="card" style={{ minWidth: 290 }}>
+          <div className="stat-label">קישור קבוע לשאלון</div>
+          <div className="row wrap" style={{ marginTop: 10 }}>
+            <button className="btn btn-primary" onClick={copyPublicLink}><Copy size={16} /> {linkCopied ? "הועתק" : "העתקת קישור"}</button>
+            <button className="btn" onClick={() => window.open("/form", "_blank", "noopener,noreferrer")}>פתיחה</button>
+          </div>
+        </section>
+      </div>
 
-      {templateMode && <div className="notice" style={{ marginBottom: 16 }}><b>תצוגה ללא מחזור</b><div className="stat-label" style={{ marginTop: 4 }}>זו תבנית ברירת המחדל של השאלון. אפשר לצפות בה גם כשאין כרגע מחזור פעיל. כדי לערוך ולפרסם שאלון בפועל, בחרי מחזור בתכנון או מחזור פעיל.</div></div>}
-      {cycleLocked && <div className="notice warning" style={{ marginBottom: 16 }}><b>המחזור סגור לקריאה בלבד</b><div className="stat-label" style={{ marginTop: 4 }}>אפשר לראות את השאלון כפי שהיה במחזור הזה, אבל לא לשנות אותו.</div></div>}
+      {cycleLocked && <div className="notice warning" style={{ marginBottom: 16 }}><b>מחזור סגור — צפייה בלבד</b></div>}
       {error && <div className="notice danger" style={{ marginBottom: 16 }}>{error}</div>}
-      {saved && <div className="notice success" style={{ marginBottom: 16 }}>✓ גרסה {version} פורסמה. קישורים לשאלון ישתמשו מעכשיו בגרסה הזו.</div>}
+      {saved && <div className="notice success" style={{ marginBottom: 16 }}>✓ גרסה {version} פורסמה.</div>}
 
       {loading ? <div className="notice">טוען שאלון...</div> : (
         <div className="grid grid-2">
@@ -292,15 +307,10 @@ export default function QuestionnairePage() {
 
           <aside className="grid" style={{ alignContent: "start" }}>
             <section className="card">
-              <div className="row between"><h2 className="section-title">כך המועמד/ת יראו את השאלון</h2><span className="badge">{questions.length} שאלות</span></div>
+              <div className="row between"><h2 className="section-title">תצוגה מקדימה</h2><span className="badge">{questions.length} שאלות</span></div>
               <div className="grid">
                 {questions.map((question) => <div className="preview-field" key={question.id}><b>{question.label}{question.required ? " *" : ""}</b><div style={{ marginTop: 9 }}>{question.type === "long_text" ? <textarea rows={3} disabled placeholder="תשובה..." /> : question.type === "yes_no" ? <div className="row"><label><input type="radio" disabled /> כן</label><label><input type="radio" disabled /> לא</label></div> : question.type === "single_choice" || question.type === "multi_choice" ? <div className="row wrap">{(question.options ?? []).map((o) => <span className="badge" key={o}>{o}</span>)}</div> : <input className="input" disabled placeholder={typeLabels[question.type]} />}</div></div>)}
               </div>
-            </section>
-            <section className="card">
-              <h2 className="section-title">גישה למועמדים</h2>
-              <p className="section-subtitle">כשהשאלון משויך למחזור ולמועמד/ת, נוצר עבורו קישור אישי שאפשר לשלוח בוואטסאפ. המועמד/ת לא צריכים שם משתמש או סיסמה.</p>
-              <span className="badge ok">גישה דרך קישור אישי</span>
             </section>
           </aside>
         </div>
