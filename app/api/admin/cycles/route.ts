@@ -11,10 +11,25 @@ const DEFAULT_QUESTIONS = [
   { field_key: "motivation", label: "למה מעניין אותך להשתלב ביחידה טכנולוגית?", field_type: "long_text", required: true, maps_to_candidate_field: null },
 ];
 
+const ALLOWED_STATUSES = new Set(["draft", "active", "completed", "archived"]);
+
+function normalizedStatus(value: unknown) {
+  const status = String(value || "draft");
+  return ALLOWED_STATUSES.has(status) ? status : "draft";
+}
+
+function validateDates(startsOn: unknown, endsOn: unknown) {
+  const start = startsOn ? String(startsOn) : "";
+  const end = endsOn ? String(endsOn) : "";
+  if (start && end && end <= start) throw new Error("END_DATE_MUST_BE_AFTER_START_DATE");
+}
+
 export async function POST(request: Request) {
   try {
     const { supabase, user } = await requireAdmin();
     const body = await request.json();
+    validateDates(body.startsOn, body.endsOn);
+
     const { data: cycle, error } = await supabase.from("cycles").insert({
       name: body.name,
       recruitment_year: body.recruitmentYear,
@@ -22,7 +37,7 @@ export async function POST(request: Request) {
       ends_on: body.endsOn || null,
       interview_duration_minutes: body.durationMinutes || 30,
       created_by: user.id,
-      status: body.status || "draft",
+      status: normalizedStatus(body.status),
     }).select().single();
     if (error) throw error;
 
@@ -69,6 +84,61 @@ export async function POST(request: Request) {
     if (questionsError) throw questionsError;
 
     return NextResponse.json({ cycle }, { status: 201 });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "ERROR";
+    return NextResponse.json({ error: message }, { status: message === "UNAUTHORIZED" ? 401 : message === "FORBIDDEN" ? 403 : 500 });
+  }
+}
+
+export async function PATCH(request: Request) {
+  try {
+    const { supabase } = await requireAdmin();
+    const body = await request.json();
+    const id = String(body.id || "");
+    if (!id) return NextResponse.json({ error: "INVALID_INPUT" }, { status: 400 });
+    validateDates(body.startsOn, body.endsOn);
+
+    const { data: cycle, error } = await supabase.from("cycles").update({
+      name: body.name,
+      recruitment_year: body.recruitmentYear,
+      starts_on: body.startsOn || null,
+      ends_on: body.endsOn || null,
+      interview_duration_minutes: body.durationMinutes || 30,
+      status: normalizedStatus(body.status),
+      updated_at: new Date().toISOString(),
+    }).eq("id", id).select().single();
+    if (error) throw error;
+
+    if (Array.isArray(body.units)) {
+      const { error: deleteUnitsError } = await supabase.from("cycle_units").delete().eq("cycle_id", id);
+      if (deleteUnitsError) throw deleteUnitsError;
+      if (body.units.length) {
+        const rows = body.units.map((u: { unitId: string; interviewerId?: string }) => ({
+          cycle_id: id,
+          unit_id: u.unitId,
+          interviewer_id: u.interviewerId || null,
+        }));
+        const { error: unitsError } = await supabase.from("cycle_units").insert(rows);
+        if (unitsError) throw unitsError;
+      }
+    }
+
+    if (Array.isArray(body.days)) {
+      const { error: deleteDaysError } = await supabase.from("interview_days").delete().eq("cycle_id", id);
+      if (deleteDaysError) throw deleteDaysError;
+      if (body.days.length) {
+        const rows = body.days.map((d: { date: string; start: string; end: string }) => ({
+          cycle_id: id,
+          interview_date: d.date,
+          starts_at: d.start,
+          ends_at: d.end,
+        }));
+        const { error: daysError } = await supabase.from("interview_days").insert(rows);
+        if (daysError) throw daysError;
+      }
+    }
+
+    return NextResponse.json({ cycle });
   } catch (error) {
     const message = error instanceof Error ? error.message : "ERROR";
     return NextResponse.json({ error: message }, { status: message === "UNAUTHORIZED" ? 401 : message === "FORBIDDEN" ? 403 : 500 });
