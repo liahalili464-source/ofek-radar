@@ -45,14 +45,13 @@ export default function LoginPage() {
         <p>פלטפורמה מרכזית למדור איתור ומיון — קליטת מועמדים, שאלונים, שיבוץ ראיונות, חוות דעת ומעקב אחר התהליך המלא במקום אחד.</p>
       </div></section>
       <section className="login-side">
-        <form className="login-card" onSubmit={submit}>
+        <form className="login-card" onSubmit={submit} autoComplete="on">
           <Image src="/ofek-radar-logo.png" alt="OFEK RADAR" width={260} height={92} style={{ width: 260, height: "auto", display: "block", margin: "0 auto 24px" }} />
-          <div className="field"><label>שם משתמש</label><input className="input" name="username" placeholder="הזן/י שם משתמש" defaultValue="admin" autoComplete="username" /></div>
-          <div className="field"><label>סיסמה</label><input className="input" name="password" type="password" placeholder="••••••••" defaultValue="demo1234" autoComplete="current-password" /></div>
-          <div className="row between" style={{ margin: "8px 0 22px" }}><label className="row"><input type="checkbox" /> זכור אותי</label><span className="accent" style={{ fontWeight: 800 }}>שכחתי סיסמה</span></div>
+          <div className="field"><label>שם משתמש</label><input className="input" name="username" placeholder="הזן/י שם משתמש" autoComplete="username" required /></div>
+          <div className="field"><label>סיסמה</label><input className="input" name="password" type="password" placeholder="••••••••" autoComplete="current-password" required /></div>
+          <div className="row between" style={{ margin: "8px 0 22px" }}><label className="row"><input type="checkbox" /> זכור אותי</label><span className="accent" style={{ fontWeight: 700 }}>שכחתי סיסמה</span></div>
           {error && <div className="notice danger" style={{ marginBottom: 12 }}>{error}</div>}
           <button className="btn btn-primary" style={{ width: "100%" }} disabled={loading}>{loading ? "מתחבר/ת..." : "התחברות"}</button>
-          <div className="notice" style={{ marginTop: 14, background: "rgba(255,255,255,.03)" }}><b>דמו:</b><div className="stat-label">admin → צד מנהל · interviewer1 → צד מראיין. כל סיסמה עובדת כל עוד Supabase לא מחובר.</div></div>
         </form>
       </section>
     </div>
