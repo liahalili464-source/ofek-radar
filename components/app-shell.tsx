@@ -26,6 +26,7 @@ const adminNav = [
 
 const interviewerNav = [
   { href: "/interviewer", label: "הראיונות שלי", icon: ClipboardList },
+  { href: "/interviewer/candidates", label: "המועמדים שלי", icon: Users },
 ];
 
 type Viewer = {
@@ -104,7 +105,9 @@ export function AppShell({
         </Link>
         <nav className="nav">
           {nav.map(({ href, label, icon: Icon }) => {
-            const active = path === href || path.startsWith(`${href}/`);
+            const active = href === "/interviewer"
+              ? path === "/interviewer"
+              : path === href || path.startsWith(`${href}/`);
             return (
               <Link key={href} href={href} className={active ? "active" : ""}>
                 <Icon size={18} strokeWidth={1.8} />
