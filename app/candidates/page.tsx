@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { Plus } from "lucide-react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 import { AppShell } from "@/components/app-shell";
 import { StatCard } from "@/components/stat-card";
 import { StatusBadge } from "@/components/status-badge";
@@ -31,6 +32,14 @@ function one<T>(value: T | T[] | null): T | null {
   return Array.isArray(value) ? value[0] ?? null : value;
 }
 
+function normalizePhone(value: string) {
+  let digits = value.replace(/\D/g, "");
+  if (digits.startsWith("00972")) digits = `0${digits.slice(5)}`;
+  else if (digits.startsWith("972")) digits = `0${digits.slice(3)}`;
+  else if (digits.length === 9 && digits.startsWith("5")) digits = `0${digits}`;
+  return digits;
+}
+
 const statusLabels: Record<string, string> = {
   new: "חדש",
   questionnaire_completed: "שאלון הושלם",
@@ -58,8 +67,15 @@ export default function CandidatesPage() {
   const [rows, setRows] = useState<CandidateRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("all");
+  const [showAdd, setShowAdd] = useState(false);
+  const [adding, setAdding] = useState(false);
+  const [newName, setNewName] = useState("");
+  const [newPhone, setNewPhone] = useState("");
+  const [newCity, setNewCity] = useState("");
+  const [refreshKey, setRefreshKey] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -125,7 +141,55 @@ export default function CandidatesPage() {
     }
     loadCandidates();
     return () => { cancelled = true; };
-  }, [cycleId]);
+  }, [cycleId, refreshKey]);
+
+  async function addCandidate(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    if (!cycleId) return;
+    const phone = normalizePhone(newPhone);
+    if (!newName.trim() || phone.length < 9) {
+      setError("יש להזין שם ומספר טלפון תקין.");
+      return;
+    }
+    setAdding(true);
+    setError("");
+    setSuccess("");
+    try {
+      const supabase = createSupabaseBrowserClient();
+      const { data: existing, error: existingError } = await supabase.from("candidates").select("id").eq("phone", phone).limit(2);
+      if (existingError) throw existingError;
+      if ((existing || []).length > 1) throw new Error("מספר הטלפון מופיע יותר מפעם אחת במערכת.");
+
+      let candidateId = existing?.[0]?.id as string | undefined;
+      if (candidateId) {
+        const { error: updateError } = await supabase.from("candidates").update({ full_name: newName.trim(), city: newCity.trim() || null, updated_at: new Date().toISOString() }).eq("id", candidateId);
+        if (updateError) throw updateError;
+      } else {
+        const { data: created, error: createError } = await supabase.from("candidates").insert({
+          national_id: `phone:${phone}`,
+          full_name: newName.trim(),
+          phone,
+          city: newCity.trim() || null,
+          source_data: {},
+        }).select("id").single();
+        if (createError || !created) throw createError || new Error("יצירת המועמד/ת נכשלה");
+        candidateId = created.id;
+      }
+
+      const { error: membershipError } = await supabase.from("cycle_candidates").upsert({ cycle_id: cycleId, candidate_id: candidateId }, { onConflict: "cycle_id,candidate_id" });
+      if (membershipError) throw membershipError;
+      setSuccess(`${newName.trim()} נוסף/ה למחזור.`);
+      setNewName("");
+      setNewPhone("");
+      setNewCity("");
+      setShowAdd(false);
+      setRefreshKey((x) => x + 1);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "הוספת המועמד/ת נכשלה");
+    } finally {
+      setAdding(false);
+    }
+  }
 
   const statuses = useMemo(() => [...new Set(rows.map((r) => r.status))], [rows]);
   const filtered = useMemo(() => rows.filter((candidate) => {
@@ -140,7 +204,25 @@ export default function CandidatesPage() {
   const currentCycle = cycles.find((c) => c.id === cycleId);
 
   return (
-    <AppShell title="מועמדים" subtitle="העבודה מתבצעת לפי מחזור, והמחזורים הקודמים נשמרים לצפייה היסטורית.">
+    <AppShell
+      title="מועמדים"
+      actions={<button className="btn btn-primary" disabled={!cycleId} onClick={() => { setShowAdd((x) => !x); setError(""); setSuccess(""); }}><Plus size={17} /> {showAdd ? "ביטול" : "הוספת מועמד"}</button>}
+    >
+      {error && <div className="notice danger" style={{ marginBottom: 16 }}>{error}</div>}
+      {success && <div className="notice success" style={{ marginBottom: 16 }}>{success}</div>}
+
+      {showAdd && <section className="card" style={{ marginBottom: 18 }}>
+        <h2 className="section-title">הוספת מועמד/ת ידנית</h2>
+        <form onSubmit={addCandidate}>
+          <div className="grid grid-3">
+            <div className="field"><label>שם מלא</label><input className="input" value={newName} onChange={(e) => setNewName(e.target.value)} required /></div>
+            <div className="field"><label>טלפון</label><input className="input" dir="ltr" inputMode="tel" value={newPhone} onChange={(e) => setNewPhone(e.target.value)} placeholder="0501234567" required /></div>
+            <div className="field"><label>עיר</label><input className="input" value={newCity} onChange={(e) => setNewCity(e.target.value)} /></div>
+          </div>
+          <button className="btn btn-primary" disabled={adding}>{adding ? "מוסיף..." : "הוספה למחזור"}</button>
+        </form>
+      </section>}
+
       <section className="card" style={{ marginBottom: 18 }}>
         <div className="row between wrap">
           <div className="field" style={{ margin: 0, minWidth: 310 }}>
@@ -171,7 +253,6 @@ export default function CandidatesPage() {
         <span className="stat-label" style={{ alignSelf: "center" }}>{filtered.length} מתוך {rows.length} מועמדים</span>
       </div>
 
-      {error && <div className="notice danger" style={{ marginBottom: 16 }}>{error}</div>}
       <section className="card flush">
         <div className="table-wrap">
           <table className="table">
