@@ -20,13 +20,13 @@ function unitNameOf(units: UnitRel) {
   return Array.isArray(units) ? units[0]?.name ?? null : units.name;
 }
 
-function createErrorText(code?: string) {
-  if (code === "INVALID_INPUT") return "יש למלא שם, שם משתמש וסיסמה של לפחות 8 תווים.";
+function userErrorText(code?: string) {
+  if (code === "INVALID_INPUT") return "יש למלא שם ושם משתמש. סיסמה חדשה חייבת להכיל לפחות 8 תווים.";
   if (code === "UNIT_REQUIRED") return "יש לבחור יחידה לחשבון יחידה.";
   if (code === "USERNAME_EXISTS") return "שם המשתמש כבר קיים במערכת.";
   if (code === "UNIT_ACCOUNT_EXISTS") return "כבר קיים חשבון ליחידה הזו.";
   if (code === "INVALID_UNIT") return "היחידה שנבחרה אינה פעילה.";
-  return code || "יצירת החשבון נכשלה";
+  return code || "הפעולה נכשלה";
 }
 
 export default function UsersPage() {
@@ -43,6 +43,11 @@ export default function UsersPage() {
   const [password, setPassword] = useState("");
   const [role, setRole] = useState<"interviewer" | "admin">("interviewer");
   const [unitId, setUnitId] = useState("");
+  const [editing, setEditing] = useState<Account | null>(null);
+  const [editFullName, setEditFullName] = useState("");
+  const [editUsername, setEditUsername] = useState("");
+  const [editPassword, setEditPassword] = useState("");
+  const [editingBusy, setEditingBusy] = useState(false);
 
   async function load() {
     setLoading(true);
@@ -95,9 +100,59 @@ export default function UsersPage() {
       setShowCreate(false);
       await load();
     } catch (e) {
-      setError(createErrorText(e instanceof Error ? e.message : undefined));
+      setError(userErrorText(e instanceof Error ? e.message : undefined));
     } finally {
       setCreating(false);
+    }
+  }
+
+  function startEdit(account: Account) {
+    setEditing(account);
+    setEditFullName(account.full_name);
+    setEditUsername(account.username);
+    setEditPassword("");
+    setShowCreate(false);
+    setError("");
+    setSuccess("");
+  }
+
+  function cancelEdit() {
+    setEditing(null);
+    setEditFullName("");
+    setEditUsername("");
+    setEditPassword("");
+  }
+
+  async function saveEdit(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    if (!editing) return;
+    setEditingBusy(true);
+    setError("");
+    setSuccess("");
+    try {
+      const res = await fetch("/api/admin/users", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: editing.id,
+          fullName: editFullName,
+          username: editUsername,
+          password: editPassword || undefined,
+        }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || "USER_UPDATE_FAILED");
+      setAccounts((current) => current.map((account) => account.id === editing.id ? {
+        ...account,
+        full_name: json.user.full_name,
+        username: json.user.username,
+      } : account));
+      setSuccess(`החשבון ${json.user.username} עודכן בהצלחה.`);
+      cancelEdit();
+    } catch (e) {
+      setError(userErrorText(e instanceof Error ? e.message : undefined));
+    } finally {
+      setEditingBusy(false);
     }
   }
 
@@ -110,7 +165,7 @@ export default function UsersPage() {
     <AppShell
       title="יחידות והרשאות"
       subtitle="ניהול חשבונות היחידות והרשאות הגישה למערכת"
-      actions={<button className="btn btn-primary" onClick={() => { setShowCreate((value) => !value); setError(""); setSuccess(""); }}>{showCreate ? "ביטול" : "+ הוספת משתמש"}</button>}
+      actions={<button className="btn btn-primary" onClick={() => { setShowCreate((value) => !value); cancelEdit(); setError(""); setSuccess(""); }}>{showCreate ? "ביטול" : "+ הוספת משתמש"}</button>}
     >
       {error && <div className="notice danger" style={{ marginBottom: 16 }}>{error}</div>}
       {success && <div className="notice success" style={{ marginBottom: 16 }}>{success}</div>}
@@ -126,6 +181,24 @@ export default function UsersPage() {
             <div className="field"><label>סיסמה</label><input className="input" dir="ltr" type="password" value={password} onChange={(e) => setPassword(e.target.value)} minLength={8} autoComplete="new-password" required /></div>
           </div>
           <button className="btn btn-primary" disabled={creating}>{creating ? "יוצר..." : "יצירת משתמש"}</button>
+        </form>
+      </section>}
+
+      {editing && <section className="card" style={{ marginBottom: 18 }}>
+        <div className="row between wrap" style={{ marginBottom: 16 }}>
+          <div>
+            <h2 className="section-title" style={{ marginBottom: 3 }}>עריכת משתמש</h2>
+            <div className="stat-label">{editing.role === "interviewer" ? unitNameOf(editing.units) || editing.full_name : "מנהל/ת מדור"}</div>
+          </div>
+          <button className="btn btn-small" type="button" onClick={cancelEdit}>ביטול</button>
+        </div>
+        <form onSubmit={saveEdit}>
+          <div className="grid grid-3">
+            <div className="field"><label>שם</label><input className="input" value={editFullName} onChange={(e) => setEditFullName(e.target.value)} required /></div>
+            <div className="field"><label>שם משתמש</label><input className="input" dir="ltr" value={editUsername} onChange={(e) => setEditUsername(e.target.value)} required /></div>
+            <div className="field"><label>סיסמה חדשה</label><input className="input" dir="ltr" type="password" value={editPassword} onChange={(e) => setEditPassword(e.target.value)} minLength={8} autoComplete="new-password" placeholder="להשאיר ריק אם לא משנים" /></div>
+          </div>
+          <button className="btn btn-primary" disabled={editingBusy}>{editingBusy ? "שומר..." : "שמירת שינויים"}</button>
         </form>
       </section>}
 
@@ -146,7 +219,7 @@ export default function UsersPage() {
                   <td dir="ltr" style={{ textAlign: "right" }}>{a.username}</td>
                   <td>חשבון יחידה</td>
                   <td><span className={`badge ${a.active ? "ok" : ""}`}>{a.active ? "פעיל" : "מושבת"}</span></td>
-                  <td><button className="btn btn-small" disabled={busyId === a.id} onClick={() => toggle(a)}>{a.active ? "השבתה" : "הפעלה"}</button></td>
+                  <td><div className="row wrap"><button className="btn btn-small" onClick={() => startEdit(a)}>עריכה</button><button className="btn btn-small" disabled={busyId === a.id} onClick={() => toggle(a)}>{a.active ? "השבתה" : "הפעלה"}</button></div></td>
                 </tr>;
               })}
               {!loading && unitAccounts.length === 0 && <tr><td colSpan={5}><div className="empty">אין חשבונות יחידה.</div></td></tr>}
@@ -160,7 +233,7 @@ export default function UsersPage() {
         <div className="table-wrap">
           <table className="table">
             <thead><tr><th>שם</th><th>שם משתמש</th><th>הרשאה</th><th>סטטוס</th><th></th></tr></thead>
-            <tbody>{admins.map((a) => <tr key={a.id}><td><b>{a.full_name}</b></td><td dir="ltr" style={{ textAlign: "right" }}>{a.username}</td><td>מנהל/ת מדור</td><td><span className={`badge ${a.active ? "ok" : ""}`}>{a.active ? "פעיל" : "מושבת"}</span></td><td><button className="btn btn-small" disabled={busyId === a.id} onClick={() => toggle(a)}>{a.active ? "השבתה" : "הפעלה"}</button></td></tr>)}</tbody>
+            <tbody>{admins.map((a) => <tr key={a.id}><td><b>{a.full_name}</b></td><td dir="ltr" style={{ textAlign: "right" }}>{a.username}</td><td>מנהל/ת מדור</td><td><span className={`badge ${a.active ? "ok" : ""}`}>{a.active ? "פעיל" : "מושבת"}</span></td><td><div className="row wrap"><button className="btn btn-small" onClick={() => startEdit(a)}>עריכה</button><button className="btn btn-small" disabled={busyId === a.id} onClick={() => toggle(a)}>{a.active ? "השבתה" : "הפעלה"}</button></div></td></tr>)}</tbody>
           </table>
         </div>
       </section>
