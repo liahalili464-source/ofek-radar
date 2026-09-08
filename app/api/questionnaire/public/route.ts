@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createSupabaseAdminClient } from "@/lib/supabase-server";
+import { isLegacyDefaultQuestionnaire, questionnaireTemplate } from "@/lib/questionnaire-template";
 
 type Candidate = {
   id: string;
@@ -7,6 +8,7 @@ type Candidate = {
   full_name: string;
   phone: string | null;
   city: string | null;
+  photo_url: string | null;
   source_data: Record<string, unknown> | null;
 };
 
@@ -45,6 +47,21 @@ function normalizePhone(value: unknown) {
   return digits;
 }
 
+function effectiveQuestions(rows: Question[]) {
+  const filtered = rows.filter((question) => question.field_key !== "national_id" && question.maps_to_candidate_field !== "national_id");
+  if (filtered.length && !isLegacyDefaultQuestionnaire(filtered.map((q) => q.field_key))) return filtered;
+  return questionnaireTemplate.map((q, index) => ({
+    id: q.id,
+    field_key: q.fieldKey,
+    label: q.label,
+    field_type: q.type,
+    required: q.required,
+    options: q.options || [],
+    position: index,
+    maps_to_candidate_field: q.mapsToCandidateField || null,
+  }));
+}
+
 async function resolveCandidate(phone: string): Promise<ResolveResult> {
   const supabase = createSupabaseAdminClient();
   const { data: activeCycleData, error: cyclesError } = await supabase.from("cycles").select("id,name,starts_on").eq("status", "active").order("starts_on", { ascending: false });
@@ -59,7 +76,7 @@ async function resolveCandidate(phone: string): Promise<ResolveResult> {
   const candidateIds = [...new Set(memberships.map((membership) => membership.candidate_id))];
   if (!candidateIds.length) return { ok: false, error: "CANDIDATE_NOT_IN_ACTIVE_CYCLE" };
 
-  const { data: candidateData, error: candidateError } = await supabase.from("candidates").select("id,national_id,full_name,phone,city,source_data").in("id", candidateIds);
+  const { data: candidateData, error: candidateError } = await supabase.from("candidates").select("id,national_id,full_name,phone,city,photo_url,source_data").in("id", candidateIds);
   if (candidateError) throw candidateError;
   const matchingCandidates = ((candidateData || []) as Candidate[]).filter((candidate) => normalizePhone(candidate.phone) === phone);
   if (!matchingCandidates.length) return { ok: false, error: "CANDIDATE_NOT_FOUND" };
@@ -84,7 +101,7 @@ async function resolveCandidate(phone: string): Promise<ResolveResult> {
     .eq("version", questionnaire.active_version)
     .order("position", { ascending: true });
   if (questionsError) throw questionsError;
-  const questions = ((questionData || []) as Question[]).filter((question) => question.field_key !== "national_id" && question.maps_to_candidate_field !== "national_id");
+  const questions = effectiveQuestions((questionData || []) as Question[]);
   return { ok: true, supabase, candidate, cycle, membership, questionnaire, questions };
 }
 
@@ -116,7 +133,7 @@ export async function POST(request: Request) {
       const prefill: Record<string, unknown> = storedAnswers && typeof storedAnswers === "object" && !Array.isArray(storedAnswers)
         ? { ...(storedAnswers as Record<string, unknown>) }
         : {};
-      const candidateValues: Record<string, unknown> = { full_name: candidate.full_name, phone: candidate.phone, city: candidate.city };
+      const candidateValues: Record<string, unknown> = { full_name: candidate.full_name, phone: candidate.phone, city: candidate.city, photo_url: candidate.photo_url };
 
       for (const question of questions) {
         const mappedField = question.maps_to_candidate_field;
@@ -163,7 +180,7 @@ export async function POST(request: Request) {
         continue;
       }
 
-      if (!["full_name", "phone", "city"].includes(mappedField)) continue;
+      if (!["full_name", "phone", "city", "photo_url"].includes(mappedField)) continue;
       if (typeof value === "string" && value.trim()) {
         candidateUpdates[mappedField] = mappedField === "phone" ? normalizePhone(value) : value.trim();
       }
