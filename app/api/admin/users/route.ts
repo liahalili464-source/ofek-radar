@@ -94,19 +94,72 @@ export async function POST(request: Request) {
 
 export async function PATCH(request: Request) {
   try {
-    const { supabase, user } = await requireAdmin();
+    const { user } = await requireAdmin();
     const body = await request.json();
     const id = String(body.id || "");
-    if (!id || typeof body.active !== "boolean") return NextResponse.json({ error: "INVALID_INPUT" }, { status: 400 });
+    if (!id) return NextResponse.json({ error: "INVALID_INPUT" }, { status: 400 });
+
+    const hasActiveUpdate = typeof body.active === "boolean";
+    const hasProfileUpdate = body.fullName !== undefined || body.username !== undefined || body.password !== undefined;
+    if (!hasActiveUpdate && !hasProfileUpdate) return NextResponse.json({ error: "INVALID_INPUT" }, { status: 400 });
     if (id === user.id && body.active === false) return NextResponse.json({ error: "CANNOT_DISABLE_SELF" }, { status: 400 });
 
-    const { data, error } = await supabase
+    const admin = createSupabaseAdminClient();
+    const { data: current, error: currentError } = await admin
       .from("profiles")
-      .update({ active: body.active })
+      .select("id,username,full_name,active")
       .eq("id", id)
-      .select("id,active")
+      .single();
+    if (currentError || !current) throw currentError || new Error("USER_NOT_FOUND");
+
+    const username = body.username !== undefined ? String(body.username || "").trim().toLowerCase() : current.username;
+    const fullName = body.fullName !== undefined ? String(body.fullName || "").trim() : current.full_name;
+    const password = body.password !== undefined ? String(body.password || "") : "";
+
+    if (hasProfileUpdate && (!username || !fullName || (password && password.length < 8))) {
+      return NextResponse.json({ error: "INVALID_INPUT" }, { status: 400 });
+    }
+
+    if (username !== current.username) {
+      const { data: duplicateRows, error: duplicateError } = await admin
+        .from("profiles")
+        .select("id")
+        .eq("username", username)
+        .neq("id", id)
+        .limit(1);
+      if (duplicateError) throw duplicateError;
+      if (duplicateRows?.length) return NextResponse.json({ error: "USERNAME_EXISTS" }, { status: 409 });
+    }
+
+    if (hasProfileUpdate) {
+      const authChanges: { email?: string; password?: string; email_confirm?: boolean; user_metadata: { username: string; full_name: string } } = {
+        user_metadata: { username, full_name: fullName },
+      };
+      if (username !== current.username) {
+        authChanges.email = username.includes("@") ? username : `${username}@ofek-radar.local`;
+        authChanges.email_confirm = true;
+      }
+      if (password) authChanges.password = password;
+
+      const { error: authError } = await admin.auth.admin.updateUserById(id, authChanges);
+      if (authError) throw authError;
+    }
+
+    const profileChanges: Record<string, unknown> = {};
+    if (hasProfileUpdate) {
+      profileChanges.username = username;
+      profileChanges.full_name = fullName;
+    }
+    if (hasActiveUpdate) profileChanges.active = body.active;
+
+    const { data, error } = await admin
+      .from("profiles")
+      .update(profileChanges)
+      .eq("id", id)
+      .select("id,username,full_name,active")
       .single();
     if (error) throw error;
+
     return NextResponse.json({ user: data });
   } catch (error) {
     const message = error instanceof Error ? error.message : "ERROR";
