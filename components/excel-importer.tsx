@@ -6,19 +6,17 @@ import * as XLSX from "xlsx";
 type Row = Record<string, unknown>;
 export type NormalizedCandidateRow = {
   fullName: string;
-  nationalId: string;
   phone: string;
   city: string;
   photoUrl: string;
   sourceData: Row;
 };
 
-type FieldKey = "fullName" | "nationalId" | "phone" | "city" | "photoUrl";
+type FieldKey = "fullName" | "phone" | "city" | "photoUrl";
 
 const fields: { key: FieldKey; label: string; required?: boolean; aliases: string[] }[] = [
   { key: "fullName", label: "שם מלא", required: true, aliases: ["שם מלא", "שם", "full name", "fullname", "name"] },
-  { key: "nationalId", label: "תעודת זהות", required: true, aliases: ["ת.ז", "תז", "תעודת זהות", "מספר זהות", "id", "national id"] },
-  { key: "phone", label: "טלפון", aliases: ["טלפון", "נייד", "טלפון נייד", "phone", "mobile"] },
+  { key: "phone", label: "טלפון", required: true, aliases: ["טלפון", "נייד", "טלפון נייד", "מספר טלפון", "phone", "mobile"] },
   { key: "city", label: "עיר מגורים", aliases: ["עיר", "יישוב", "מגורים", "city"] },
   { key: "photoUrl", label: "תמונה / URL", aliases: ["תמונה", "photo", "image", "photo url", "image url"] },
 ];
@@ -27,8 +25,16 @@ function normalizeHeader(value: string) {
   return value.trim().toLowerCase().replace(/["'׳״._-]/g, "").replace(/\s+/g, " ");
 }
 
+function normalizePhone(value: string) {
+  let digits = value.replace(/\D/g, "");
+  if (digits.startsWith("00972")) digits = `0${digits.slice(5)}`;
+  else if (digits.startsWith("972")) digits = `0${digits.slice(3)}`;
+  else if (digits.length === 9 && digits.startsWith("5")) digits = `0${digits}`;
+  return digits;
+}
+
 function detectMapping(headers: string[]) {
-  const result: Record<FieldKey, string> = { fullName: "", nationalId: "", phone: "", city: "", photoUrl: "" };
+  const result: Record<FieldKey, string> = { fullName: "", phone: "", city: "", photoUrl: "" };
   for (const field of fields) {
     const match = headers.find((h) => field.aliases.some((a) => normalizeHeader(h) === normalizeHeader(a)));
     if (match) result[field.key] = match;
@@ -47,7 +53,7 @@ export function ExcelImporter({ onImport }: { onImport?: (rows: NormalizedCandid
   const [fileName, setFileName] = useState("");
   const [headers, setHeaders] = useState<string[]>([]);
   const [allRows, setAllRows] = useState<Row[]>([]);
-  const [mapping, setMapping] = useState<Record<FieldKey, string>>({ fullName: "", nationalId: "", phone: "", city: "", photoUrl: "" });
+  const [mapping, setMapping] = useState<Record<FieldKey, string>>({ fullName: "", phone: "", city: "", photoUrl: "" });
   const [error, setError] = useState("");
   const [imported, setImported] = useState(false);
 
@@ -80,26 +86,25 @@ export function ExcelImporter({ onImport }: { onImport?: (rows: NormalizedCandid
     const missingRequiredMappings = fields.filter((f) => f.required && !mapping[f.key]).map((f) => f.label);
     const normalized = allRows.map((row) => ({
       fullName: cell(row, mapping.fullName),
-      nationalId: cell(row, mapping.nationalId).replace(/\D/g, ""),
-      phone: cell(row, mapping.phone),
+      phone: normalizePhone(cell(row, mapping.phone)),
       city: cell(row, mapping.city),
       photoUrl: cell(row, mapping.photoUrl),
       sourceData: row,
     }));
     const seen = new Set<string>();
     const duplicates = new Set<string>();
-    let missingId = 0;
+    let missingPhone = 0;
     let missingName = 0;
     normalized.forEach((r) => {
-      if (!r.nationalId) missingId++;
+      if (!r.phone) missingPhone++;
       if (!r.fullName) missingName++;
-      if (r.nationalId) {
-        if (seen.has(r.nationalId)) duplicates.add(r.nationalId);
-        seen.add(r.nationalId);
+      if (r.phone) {
+        if (seen.has(r.phone)) duplicates.add(r.phone);
+        seen.add(r.phone);
       }
     });
-    const valid = normalized.filter((r) => r.fullName && r.nationalId && !duplicates.has(r.nationalId));
-    return { missingRequiredMappings, normalized, duplicates: duplicates.size, missingId, missingName, valid };
+    const valid = normalized.filter((r) => r.fullName && r.phone && !duplicates.has(r.phone));
+    return { missingRequiredMappings, normalized, duplicates: duplicates.size, missingPhone, missingName, valid };
   }, [allRows, mapping]);
 
   function importRows() {
@@ -123,7 +128,6 @@ export function ExcelImporter({ onImport }: { onImport?: (rows: NormalizedCandid
         <>
           <div className="card" style={{ marginTop: 14, boxShadow: "none" }}>
             <h3 className="section-title">התאמת עמודות</h3>
-            <p className="section-subtitle">המערכת ניסתה לזהות אוטומטית. אפשר לשנות לפני הייבוא.</p>
             <div className="grid grid-3">
               {fields.map((field) => (
                 <div className="field" key={field.key}>
@@ -141,8 +145,8 @@ export function ExcelImporter({ onImport }: { onImport?: (rows: NormalizedCandid
             <div className="grid grid-4" style={{ marginTop: 14 }}>
               <div className="notice"><div className="stat-label">שורות בקובץ</div><b>{allRows.length}</b></div>
               <div className="notice"><div className="stat-label">תקינות לייבוא</div><b style={{ color: "var(--success)" }}>{validation.valid.length}</b></div>
-              <div className="notice"><div className="stat-label">ת.ז כפולות</div><b style={{ color: validation.duplicates ? "var(--danger)" : "inherit" }}>{validation.duplicates}</b></div>
-              <div className="notice"><div className="stat-label">חסר שם / ת.ז</div><b style={{ color: validation.missingId + validation.missingName ? "var(--warning)" : "inherit" }}>{validation.missingId + validation.missingName}</b></div>
+              <div className="notice"><div className="stat-label">טלפונים כפולים</div><b style={{ color: validation.duplicates ? "var(--danger)" : "inherit" }}>{validation.duplicates}</b></div>
+              <div className="notice"><div className="stat-label">חסר שם / טלפון</div><b style={{ color: validation.missingPhone + validation.missingName ? "var(--warning)" : "inherit" }}>{validation.missingPhone + validation.missingName}</b></div>
             </div>
           )}
 
