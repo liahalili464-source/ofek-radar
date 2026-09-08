@@ -29,7 +29,7 @@ type CycleView = CycleRow & {
 type DemoCreated = {
   cycleId: string;
   cycleName: string;
-  nationalId: string;
+  phone: string;
   unitCount: number;
 };
 
@@ -108,7 +108,7 @@ export default function CyclesPage() {
       setDemoCreated({
         cycleId: json.cycle.id,
         cycleName: json.cycle.name,
-        nationalId: json.candidate.nationalId,
+        phone: json.candidate.phone,
         unitCount: json.unitCount,
       });
       await load();
@@ -163,7 +163,7 @@ export default function CyclesPage() {
         <div className="row between wrap">
           <div>
             <b>{demoCreated.cycleName} נוצר בהצלחה</b>
-            <div className="stat-label" style={{ marginTop: 5 }}>תעודת זהות לבדיקה: <b dir="ltr">{demoCreated.nationalId}</b> · {demoCreated.unitCount} יחידות משויכות</div>
+            <div className="stat-label" style={{ marginTop: 5 }}>טלפון לבדיקה: <b dir="ltr">{demoCreated.phone}</b> · {demoCreated.unitCount} יחידות משויכות</div>
           </div>
           <div className="row wrap">
             <Link className="btn btn-small" href={`/cycles/${demoCreated.cycleId}`}>פתיחת המחזור</Link>
