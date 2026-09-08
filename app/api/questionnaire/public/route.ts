@@ -7,6 +7,7 @@ type Candidate = {
   full_name: string;
   phone: string | null;
   city: string | null;
+  source_data: Record<string, unknown> | null;
 };
 
 type Cycle = {
@@ -87,7 +88,7 @@ async function resolveCandidate(phone: string): Promise<ResolveResult> {
 
   const { data: candidateData, error: candidateError } = await supabase
     .from("candidates")
-    .select("id,national_id,full_name,phone,city")
+    .select("id,national_id,full_name,phone,city,source_data")
     .in("id", candidateIds);
   if (candidateError) throw candidateError;
 
@@ -166,7 +167,11 @@ export async function POST(request: Request) {
 
       for (const question of questions) {
         const mappedField = question.maps_to_candidate_field;
-        if (mappedField && (prefill[question.field_key] === undefined || prefill[question.field_key] === "")) {
+        if (!mappedField || (prefill[question.field_key] !== undefined && prefill[question.field_key] !== "")) continue;
+        if (mappedField.startsWith("source:")) {
+          const sourceKey = mappedField.slice("source:".length);
+          prefill[question.field_key] = candidate.source_data?.[sourceKey] ?? "";
+        } else {
           prefill[question.field_key] = candidateValues[mappedField] ?? "";
         }
       }
