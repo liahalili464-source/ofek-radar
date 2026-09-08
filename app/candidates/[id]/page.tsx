@@ -8,7 +8,6 @@ import { createSupabaseBrowserClient } from "@/lib/supabase-client";
 
 type Candidate = {
   id: string;
-  national_id: string;
   full_name: string;
   phone: string | null;
   city: string | null;
@@ -83,7 +82,7 @@ export default function CandidatePage({ params }: { params: Promise<{ id: string
       setError("");
       const supabase = createSupabaseBrowserClient();
       const [candidateRes, membershipsRes] = await Promise.all([
-        supabase.from("candidates").select("id,national_id,full_name,phone,city,source_data,created_at").eq("id", id).single(),
+        supabase.from("candidates").select("id,full_name,phone,city,source_data,created_at").eq("id", id).single(),
         supabase.from("cycle_candidates").select("cycle_id,status,cycles(id,name,status,starts_on)").eq("candidate_id", id),
       ]);
       const firstError = candidateRes.error || membershipsRes.error;
@@ -178,7 +177,7 @@ export default function CandidatePage({ params }: { params: Promise<{ id: string
           <div className="row between wrap">
             <div>
               <h2 style={{ margin: 0, fontSize: 28 }}>{candidate.full_name}</h2>
-              <div className="stat-label" style={{ marginTop: 6 }}>ת.ז {candidate.national_id}{candidate.phone ? ` · ${candidate.phone}` : ""}{candidate.city ? ` · ${candidate.city}` : ""}</div>
+              <div className="stat-label" style={{ marginTop: 6 }}>{candidate.phone || "ללא טלפון"}{candidate.city ? ` · ${candidate.city}` : ""}</div>
             </div>
             <div className="row wrap">
               {selectedCycle && <span className={`badge ${selectedCycle.status === "active" ? "ok" : ""}`}>{cycleStatus(selectedCycle.status)}</span>}
@@ -201,7 +200,6 @@ export default function CandidatePage({ params }: { params: Promise<{ id: string
               <h2 className="section-title">פרטים בסיסיים</h2>
               <div className="grid grid-2">
                 <div className="field"><label>שם מלא</label><div className="preview-field">{candidate.full_name}</div></div>
-                <div className="field"><label>תעודת זהות</label><div className="preview-field">{candidate.national_id}</div></div>
                 <div className="field"><label>טלפון</label><div className="preview-field">{candidate.phone || "—"}</div></div>
                 <div className="field"><label>עיר</label><div className="preview-field">{candidate.city || "—"}</div></div>
               </div>
