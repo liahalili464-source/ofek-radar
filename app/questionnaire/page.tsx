@@ -330,6 +330,8 @@ export default function QuestionnairePage() {
                           {sourceFields.map((field) => <option key={field} value={`source:${field}`}>{field}</option>)}
                         </optgroup>}
                       </select>
+                      {question.mapsToCandidateField && question.mapsToCandidateField !== "phone" && <div className="stat-label">הערך יוצג מראש, והמועמד/ת יוכלו לעדכן אותו אם השתנה.</div>}
+                      {question.mapsToCandidateField === "phone" && <div className="stat-label">הטלפון משמש לזיהוי ולכן יוצג ללא אפשרות שינוי.</div>}
                     </div>
                     <label className="checkbox-row" style={{ alignSelf: "center", paddingTop: 16 }}><input type="checkbox" disabled={!canEdit} checked={question.required} onChange={(e) => patch(question.id, { required: e.target.checked })} /><b>שדה חובה</b></label>
                   </div>
