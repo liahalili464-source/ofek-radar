@@ -3,7 +3,6 @@ import { requireAdmin } from "@/lib/supabase-server";
 
 const DEFAULT_QUESTIONS = [
   { field_key: "full_name", label: "שם מלא", field_type: "short_text", required: true, maps_to_candidate_field: "full_name" },
-  { field_key: "national_id", label: "תעודת זהות", field_type: "short_text", required: true, maps_to_candidate_field: "national_id" },
   { field_key: "phone", label: "טלפון", field_type: "phone", required: true, maps_to_candidate_field: "phone" },
   { field_key: "city", label: "עיר מגורים", field_type: "short_text", required: false, maps_to_candidate_field: "city" },
   { field_key: "education", label: "השכלה", field_type: "long_text", required: false, maps_to_candidate_field: null },
