@@ -14,6 +14,9 @@ type CandidateJoin = { candidate_id: string; candidates: { id: string; full_name
 type Candidate = { id: string; fullName: string; nationalId: string };
 type ExistingCycleUnit = { unit_id: string };
 type ExistingDay = { interview_date: string; starts_at: string; ends_at: string };
+type ViewMode = "table" | "slots";
+
+const UNIT_COLORS = ["#38bdf8", "#a78bfa", "#34d399", "#f59e0b", "#fb7185", "#22d3ee", "#f472b6", "#84cc16", "#f97316", "#60a5fa"];
 
 function one<T>(value: T | T[] | null): T | null {
   if (!value) return null;
@@ -37,6 +40,7 @@ export default function SchedulePage() {
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState("");
+  const [viewMode, setViewMode] = useState<ViewMode>("table");
 
   useEffect(() => {
     let cancelled = false;
@@ -115,6 +119,7 @@ export default function SchedulePage() {
   const candidateNameById = useMemo(() => new Map(candidates.map((c) => [c.id, c.fullName])), [candidates]);
   const unitNameById = useMemo(() => new Map(units.map((u) => [u.id, u.name])), [units]);
   const accountByUnit = useMemo(() => new Map(accounts.filter((a) => a.unit_id).map((a) => [a.unit_id as string, a.id])), [accounts]);
+  const unitColorById = useMemo(() => new Map(selectedUnits.map((unit, index) => [unit.id, UNIT_COLORS[index % UNIT_COLORS.length]])), [selectedUnits]);
 
   const input = useMemo(() => ({
     candidateNames: candidates.map((c) => c.id),
@@ -132,7 +137,7 @@ export default function SchedulePage() {
       const key = `${item.date}|${item.start}|${item.end}`;
       map.set(key, [...(map.get(key) ?? []), item]);
     });
-    return [...map.entries()];
+    return [...map.entries()].sort(([a], [b]) => a.localeCompare(b));
   }, [schedule]);
 
   function toggleUnit(id: string) {
@@ -249,20 +254,22 @@ export default function SchedulePage() {
       </section>
 
       <section className="card" style={{ marginBottom: 18 }}>
-        <div className="row between"><div><h2 className="section-title" style={{ marginBottom: 4 }}>יחידות במחזור</h2><div className="stat-label">סמני בדיוק אילו יחידות משתתפות. כל מועמד/ת יפגוש/תפגוש כל יחידה שנבחרה.</div></div><span className="badge">{selectedUnits.length} נבחרו</span></div>
+        <div className="row between"><h2 className="section-title" style={{ marginBottom: 4 }}>יחידות במחזור</h2><span className="badge">{selectedUnits.length} נבחרו</span></div>
         <div className="grid grid-4" style={{ marginTop: 14 }}>
           {units.map((unit) => {
             const hasAccount = accountByUnit.has(unit.id);
-            return <label className="notice checkbox-row" key={unit.id} style={{ opacity: hasAccount ? 1 : .55 }}>
-              <input type="checkbox" checked={selectedUnitIds.includes(unit.id)} disabled={!hasAccount} onChange={() => toggleUnit(unit.id)} />
-              <span><b>{unit.name}</b><div className="stat-label">{hasAccount ? "חשבון יחידה פעיל" : "חסר חשבון יחידה"}</div></span>
+            const selected = selectedUnitIds.includes(unit.id);
+            const color = selected ? unitColorById.get(unit.id) : undefined;
+            return <label className="notice checkbox-row" key={unit.id} style={{ opacity: hasAccount ? 1 : .55, borderColor: color || undefined, background: color ? `${color}16` : undefined }}>
+              <input type="checkbox" checked={selected} disabled={!hasAccount} onChange={() => toggleUnit(unit.id)} />
+              <span><b>{unit.name}</b>{selected && color && <span style={{ display: "inline-block", width: 9, height: 9, borderRadius: 999, background: color, marginInlineStart: 8 }} />}{!hasAccount && <div className="stat-label">חסר חשבון יחידה</div>}</span>
             </label>;
           })}
         </div>
       </section>
 
       <section className="card" style={{ marginBottom: 18 }}>
-        <div className="row between"><div><h2 className="section-title" style={{ marginBottom: 4 }}>ימי ראיונות</h2><div className="stat-label">הפסקת 12:30–13:00 אינה נחשבת כסלוט.</div></div><button className="btn btn-small" onClick={addDay}>+ הוספת יום</button></div>
+        <div className="row between"><h2 className="section-title" style={{ marginBottom: 4 }}>ימי ראיונות</h2><button className="btn btn-small" onClick={addDay}>+ הוספת יום</button></div>
         <div className="grid grid-3" style={{ marginTop: 14 }}>
           {days.map((day, index) => <div className="notice" key={`${day.date}-${index}`}>
             <div className="grid grid-3">
@@ -289,15 +296,57 @@ export default function SchedulePage() {
       {!!schedule.length && (
         <section className="card">
           <div className="row between wrap" style={{ marginBottom: 16 }}>
-            <div><h2 className="section-title" style={{ marginBottom: 4 }}>תצוגה מקדימה של הלוז</h2><div className="stat-label">{schedule.length} ראיונות · ללא חפיפה למועמד/ת או ליחידה</div></div>
-            <div className="row wrap"><button className="btn" onClick={exportExcel}>ייצוא Excel</button><button className="btn btn-primary" disabled={saving || !validation?.valid} onClick={saveSchedule}>{saving ? "שומר..." : "אישור ושמירת הלוז"}</button></div>
+            <div><h2 className="section-title" style={{ marginBottom: 4 }}>תצוגה מקדימה של הלוז</h2><div className="stat-label">{schedule.length} ראיונות</div></div>
+            <div className="row wrap">
+              <div className="row" style={{ gap: 6 }}>
+                <button className={`btn btn-small ${viewMode === "table" ? "btn-primary" : ""}`} onClick={() => setViewMode("table")}>טבלה לפי יחידה</button>
+                <button className={`btn btn-small ${viewMode === "slots" ? "btn-primary" : ""}`} onClick={() => setViewMode("slots")}>לפי שעות</button>
+              </div>
+              <button className="btn" onClick={exportExcel}>ייצוא Excel</button>
+              <button className="btn btn-primary" disabled={saving || !validation?.valid} onClick={saveSchedule}>{saving ? "שומר..." : "אישור ושמירת הלוז"}</button>
+            </div>
           </div>
-          <div className="grid">
-            {grouped.map(([key, meetings]) => {
-              const [date, start, end] = key.split("|");
-              return <div className="schedule-slot" key={key}><div className="schedule-slot-head"><span>{date}</span><span>{start}–{end}</span></div><div className="schedule-grid">{meetings.map((m) => <div className="schedule-meeting" key={`${m.unit}-${m.candidate}`}><b>{unitNameById.get(m.unit) || m.unit}</b><div style={{ marginTop: 4 }}>{candidateNameById.get(m.candidate) || m.candidate}</div></div>)}</div></div>;
-            })}
-          </div>
+
+          {viewMode === "table" ? (
+            <div className="table-wrap">
+              <table className="table" style={{ minWidth: Math.max(900, 250 + selectedUnits.length * 180) }}>
+                <thead>
+                  <tr>
+                    <th>תאריך</th>
+                    <th>שעה</th>
+                    {selectedUnits.map((unit) => {
+                      const color = unitColorById.get(unit.id) || UNIT_COLORS[0];
+                      return <th key={unit.id} style={{ borderTop: `3px solid ${color}`, background: `${color}14` }}><span style={{ display: "inline-block", width: 9, height: 9, borderRadius: 999, background: color, marginInlineEnd: 7 }} />{unit.name}</th>;
+                    })}
+                  </tr>
+                </thead>
+                <tbody>
+                  {grouped.map(([key, meetings]) => {
+                    const [date, start, end] = key.split("|");
+                    return <tr key={key}>
+                      <td><b>{date}</b></td>
+                      <td>{start}–{end}</td>
+                      {selectedUnits.map((unit) => {
+                        const meeting = meetings.find((m) => m.unit === unit.id);
+                        const color = unitColorById.get(unit.id) || UNIT_COLORS[0];
+                        return <td key={unit.id}>{meeting ? <div style={{ borderInlineStart: `4px solid ${color}`, paddingInlineStart: 10, minHeight: 30, display: "flex", alignItems: "center" }}><b>{candidateNameById.get(meeting.candidate) || meeting.candidate}</b></div> : <span className="muted">—</span>}</td>;
+                      })}
+                    </tr>;
+                  })}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <div className="grid">
+              {grouped.map(([key, meetings]) => {
+                const [date, start, end] = key.split("|");
+                return <div className="schedule-slot" key={key}><div className="schedule-slot-head"><span>{date}</span><span>{start}–{end}</span></div><div className="schedule-grid">{meetings.map((m) => {
+                  const color = unitColorById.get(m.unit) || UNIT_COLORS[0];
+                  return <div className="schedule-meeting" key={`${m.unit}-${m.candidate}`} style={{ borderInlineStart: `4px solid ${color}`, background: `${color}14` }}><b>{unitNameById.get(m.unit) || m.unit}</b><div style={{ marginTop: 4 }}>{candidateNameById.get(m.candidate) || m.candidate}</div></div>;
+                })}</div></div>;
+              })}
+            </div>
+          )}
           {saved && <div className="notice success" style={{ marginTop: 14 }}>✓ הלוח נשמר ויופיע בחשבונות היחידות.</div>}
         </section>
       )}
