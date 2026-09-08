@@ -9,7 +9,6 @@ import { createSupabaseBrowserClient } from "@/lib/supabase-client";
 
 type CandidateRow = {
   id: string;
-  nationalId: string;
   fullName: string;
   phone: string | null;
   city: string | null;
@@ -24,7 +23,7 @@ type CycleOption = { id: string; name: string; status: string };
 type CandidateJoin = {
   candidate_id: string;
   status: string;
-  candidates: { id: string; national_id: string; full_name: string; phone: string | null; city: string | null } | { id: string; national_id: string; full_name: string; phone: string | null; city: string | null }[] | null;
+  candidates: { id: string; full_name: string; phone: string | null; city: string | null } | { id: string; full_name: string; phone: string | null; city: string | null }[] | null;
 };
 
 function one<T>(value: T | T[] | null): T | null {
@@ -48,7 +47,7 @@ function displayStatus(status: string) {
 function cycleStatusLabel(status: string) {
   if (status === "active") return "פעיל";
   if (status === "draft") return "בתכנון";
-  if (status === "completed") return "הושלם";
+  if (status === "completed") return "סגור";
   if (status === "archived") return "ארכיון";
   return status;
 }
@@ -91,7 +90,7 @@ export default function CandidatesPage() {
       setError("");
       const supabase = createSupabaseBrowserClient();
       const [membersRes, responsesRes, interviewsRes, evaluationsRes] = await Promise.all([
-        supabase.from("cycle_candidates").select("candidate_id,status,candidates(id,national_id,full_name,phone,city)").eq("cycle_id", cycleId),
+        supabase.from("cycle_candidates").select("candidate_id,status,candidates(id,full_name,phone,city)").eq("cycle_id", cycleId),
         supabase.from("questionnaire_responses").select("candidate_id").eq("cycle_id", cycleId),
         supabase.from("interviews").select("id,candidate_id,status").eq("cycle_id", cycleId),
         supabase.from("evaluations").select("interview_id"),
@@ -112,7 +111,6 @@ export default function CandidatesPage() {
         const completed = candidateInterviews.filter((i) => i.status === "completed");
         return [{
           id: candidate.id,
-          nationalId: candidate.national_id,
           fullName: candidate.full_name,
           phone: candidate.phone,
           city: candidate.city,
@@ -132,7 +130,7 @@ export default function CandidatesPage() {
   const statuses = useMemo(() => [...new Set(rows.map((r) => r.status))], [rows]);
   const filtered = useMemo(() => rows.filter((candidate) => {
     const q = search.trim().toLowerCase();
-    const matchesSearch = !q || [candidate.fullName, candidate.nationalId, candidate.phone || "", candidate.city || ""].some((value) => value.toLowerCase().includes(q));
+    const matchesSearch = !q || [candidate.fullName, candidate.phone || "", candidate.city || ""].some((value) => value.toLowerCase().includes(q));
     return matchesSearch && (status === "all" || candidate.status === status);
   }), [rows, search, status]);
 
@@ -164,7 +162,7 @@ export default function CandidatesPage() {
       </div>
 
       <div className="toolbar">
-        <input className="input" style={{ maxWidth: 360 }} placeholder="חיפוש שם / ת.ז / טלפון / עיר..." value={search} onChange={(e) => setSearch(e.target.value)} />
+        <input className="input" style={{ maxWidth: 360 }} placeholder="חיפוש שם / טלפון / עיר..." value={search} onChange={(e) => setSearch(e.target.value)} />
         <select className="select" style={{ maxWidth: 220 }} value={status} onChange={(e) => setStatus(e.target.value)}>
           <option value="all">סטטוס: הכל</option>
           {statuses.map((s) => <option key={s} value={s}>{displayStatus(s)}</option>)}
@@ -177,13 +175,12 @@ export default function CandidatesPage() {
       <section className="card flush">
         <div className="table-wrap">
           <table className="table">
-            <thead><tr><th>מועמד/ת</th><th>ת.ז</th><th>טלפון</th><th>עיר</th><th>שאלון</th><th>ראיונות</th><th>סטטוס</th><th></th></tr></thead>
+            <thead><tr><th>מועמד/ת</th><th>טלפון</th><th>עיר</th><th>שאלון</th><th>ראיונות</th><th>סטטוס</th><th></th></tr></thead>
             <tbody>
-              {loading && <tr><td colSpan={8}>טוען מועמדים...</td></tr>}
+              {loading && <tr><td colSpan={7}>טוען מועמדים...</td></tr>}
               {!loading && filtered.map((candidate) => (
                 <tr key={candidate.id}>
                   <td><b>{candidate.fullName}</b></td>
-                  <td>{candidate.nationalId}</td>
                   <td>{candidate.phone || "—"}</td>
                   <td>{candidate.city || "—"}</td>
                   <td><span className={`badge ${candidate.questionnaireDone ? "ok" : "warn"}`}>{candidate.questionnaireDone ? "הושלם" : "ממתין"}</span></td>
@@ -192,7 +189,7 @@ export default function CandidatesPage() {
                   <td><Link href={`/candidates/${candidate.id}?cycle=${cycleId}`} className="btn btn-small btn-primary">פתיחת כרטיס</Link></td>
                 </tr>
               ))}
-              {!loading && filtered.length === 0 && <tr><td colSpan={8}><div className="empty">לא נמצאו מועמדים שמתאימים לסינון.</div></td></tr>}
+              {!loading && filtered.length === 0 && <tr><td colSpan={7}><div className="empty">לא נמצאו מועמדים שמתאימים לסינון.</div></td></tr>}
             </tbody>
           </table>
         </div>
