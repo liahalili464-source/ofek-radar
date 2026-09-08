@@ -47,7 +47,6 @@ export default function LoginPage() {
         <div className="login-copy">
           <Image src="/ofek-radar-logo.png" alt="OFEK RADAR" width={632} height={223} priority />
           <h1>מערכת ניהול מחזורי ראיונות ומיון מועמדים</h1>
-          <p>פלטפורמה מרכזית למדור איתור ומיון — קליטת מועמדים, שאלונים, שיבוץ ראיונות, חוות דעת ומעקב אחר התהליך המלא במקום אחד.</p>
         </div>
       </section>
       <section className="login-side">
