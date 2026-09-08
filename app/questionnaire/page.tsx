@@ -30,7 +30,6 @@ const typeLabels: Record<QuestionType, string> = {
 };
 
 const candidateFields = [
-  ["", "ללא מיפוי"],
   ["full_name", "שם מלא"],
   ["phone", "טלפון"],
   ["city", "עיר"],
@@ -39,6 +38,13 @@ const candidateFields = [
 type Cycle = { id: string; name: string; status: string };
 type QuestionnaireRow = { id: string; title: string; active_version: number };
 type QuestionRow = { id: string; field_key: string; label: string; field_type: QuestionType; required: boolean; options: string[]; position: number; maps_to_candidate_field: string | null };
+type SourceCandidate = { source_data: Record<string, unknown> | null };
+type SourceJoin = { candidates: SourceCandidate | SourceCandidate[] | null };
+
+function one<T>(value: T | T[] | null): T | null {
+  if (!value) return null;
+  return Array.isArray(value) ? value[0] ?? null : value;
+}
 
 function nextId() {
   return `q_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
@@ -52,12 +58,20 @@ function cycleStatusLabel(status: string) {
   return status;
 }
 
+function usableSourceKey(key: string) {
+  const trimmed = key.trim();
+  if (!trimmed) return false;
+  if (/^__EMPTY(?:_\d+)?$/i.test(trimmed)) return false;
+  return true;
+}
+
 export default function QuestionnairePage() {
   const [cycles, setCycles] = useState<Cycle[]>([]);
   const [cycleId, setCycleId] = useState(TEMPLATE_MODE);
   const [questionnaireId, setQuestionnaireId] = useState<string | null>(null);
   const [version, setVersion] = useState(1);
   const [questions, setQuestions] = useState<QuestionnaireQuestion[]>(questionnaireTemplate);
+  const [sourceFields, setSourceFields] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -82,6 +96,7 @@ export default function QuestionnairePage() {
           setQuestionnaireId(null);
           setVersion(1);
           setQuestions(questionnaireTemplate);
+          setSourceFields([]);
           setLoading(false);
         }
       }
@@ -95,6 +110,7 @@ export default function QuestionnairePage() {
       setQuestionnaireId(null);
       setVersion(1);
       setQuestions(questionnaireTemplate);
+      setSourceFields([]);
       setSaved(false);
       setLoading(false);
       setError("");
@@ -139,12 +155,17 @@ export default function QuestionnairePage() {
       }
 
       const q = questionnaire as QuestionnaireRow;
-      const { data: questionData, error: questionError } = await supabase.from("questionnaire_questions").select("id,field_key,label,field_type,required,options,position,maps_to_candidate_field").eq("questionnaire_id", q.id).eq("version", q.active_version).order("position");
-      if (questionError) {
-        if (!cancelled) { setError(questionError.message); setLoading(false); }
+      const [questionRes, sourceRes] = await Promise.all([
+        supabase.from("questionnaire_questions").select("id,field_key,label,field_type,required,options,position,maps_to_candidate_field").eq("questionnaire_id", q.id).eq("version", q.active_version).order("position"),
+        supabase.from("cycle_candidates").select("candidates(source_data)").eq("cycle_id", cycleId).limit(50),
+      ]);
+      const firstError = questionRes.error || sourceRes.error;
+      if (firstError) {
+        if (!cancelled) { setError(firstError.message); setLoading(false); }
         return;
       }
-      const mapped = ((questionData || []) as QuestionRow[]).map((row) => ({
+
+      const mapped = ((questionRes.data || []) as QuestionRow[]).map((row) => ({
         id: row.id,
         fieldKey: row.field_key,
         label: row.label,
@@ -153,10 +174,20 @@ export default function QuestionnairePage() {
         options: row.options || [],
         mapsToCandidateField: row.maps_to_candidate_field || undefined,
       }));
+
+      const sourceKeySet = new Set<string>();
+      ((sourceRes.data || []) as unknown as SourceJoin[]).forEach((row) => {
+        const candidate = one(row.candidates);
+        Object.keys(candidate?.source_data || {}).forEach((key) => {
+          if (usableSourceKey(key)) sourceKeySet.add(key);
+        });
+      });
+
       if (!cancelled) {
         setQuestionnaireId(q.id);
         setVersion(q.active_version);
         setQuestions(mapped);
+        setSourceFields([...sourceKeySet]);
         setLoading(false);
       }
     }
@@ -288,7 +319,18 @@ export default function QuestionnairePage() {
                   </div>
                   {(question.type === "single_choice" || question.type === "multi_choice") && <div className="field"><label>אפשרויות</label><input className="input" disabled={!canEdit} value={(question.options ?? []).join(", ")} onChange={(e) => patch(question.id, { options: e.target.value.split(",").map((x) => x.trim()).filter(Boolean) })} /></div>}
                   <div className="grid grid-2">
-                    <div className="field"><label>מיפוי לכרטיס מועמד</label><select className="select" disabled={!canEdit} value={question.mapsToCandidateField ?? ""} onChange={(e) => patch(question.id, { mapsToCandidateField: e.target.value || undefined })}>{candidateFields.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></div>
+                    <div className="field">
+                      <label>מילוי אוטומטי מתוך</label>
+                      <select className="select" disabled={!canEdit} value={question.mapsToCandidateField ?? ""} onChange={(e) => patch(question.id, { mapsToCandidateField: e.target.value || undefined })}>
+                        <option value="">ללא מילוי אוטומטי</option>
+                        <optgroup label="פרטי מועמד">
+                          {candidateFields.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+                        </optgroup>
+                        {sourceFields.length > 0 && <optgroup label="נתוני Excel">
+                          {sourceFields.map((field) => <option key={field} value={`source:${field}`}>{field}</option>)}
+                        </optgroup>}
+                      </select>
+                    </div>
                     <label className="checkbox-row" style={{ alignSelf: "center", paddingTop: 16 }}><input type="checkbox" disabled={!canEdit} checked={question.required} onChange={(e) => patch(question.id, { required: e.target.checked })} /><b>שדה חובה</b></label>
                   </div>
                 </div>
