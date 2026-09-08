@@ -1,7 +1,15 @@
 import { NextResponse } from "next/server";
 import { requireAdmin } from "@/lib/supabase-server";
 
-type ImportRow = { fullName: string; nationalId: string; phone?: string; city?: string; photoUrl?: string; sourceData?: Record<string, unknown> };
+type ImportRow = { fullName: string; phone: string; city?: string; photoUrl?: string; sourceData?: Record<string, unknown> };
+
+function normalizePhone(value: unknown) {
+  let digits = String(value ?? "").replace(/\D/g, "");
+  if (digits.startsWith("00972")) digits = `0${digits.slice(5)}`;
+  else if (digits.startsWith("972")) digits = `0${digits.slice(3)}`;
+  else if (digits.length === 9 && digits.startsWith("5")) digits = `0${digits}`;
+  return digits;
+}
 
 export async function POST(request: Request) {
   try {
@@ -14,26 +22,49 @@ export async function POST(request: Request) {
     if (!cycleId || !rows.length) return NextResponse.json({ error: "INVALID_INPUT" }, { status: 400 });
 
     let imported = 0;
-    const rejected: { nationalId?: string; reason: string }[] = [];
+    const rejected: { phone?: string; reason: string }[] = [];
 
     for (const row of rows) {
-      const nationalId = String(row.nationalId || "").replace(/\D/g, "");
+      const phone = normalizePhone(row.phone);
       const fullName = String(row.fullName || "").trim();
-      if (!nationalId || !fullName) { rejected.push({ nationalId, reason: "MISSING_REQUIRED_FIELD" }); continue; }
+      if (!phone || !fullName) { rejected.push({ phone, reason: "MISSING_REQUIRED_FIELD" }); continue; }
 
-      const { data: candidate, error: candidateError } = await supabase.from("candidates").upsert({
-        national_id: nationalId,
-        full_name: fullName,
-        phone: row.phone || null,
-        city: row.city || null,
-        photo_url: row.photoUrl || null,
-        source_data: row.sourceData ?? {},
-        updated_at: new Date().toISOString(),
-      }, { onConflict: "national_id" }).select("id").single();
-      if (candidateError || !candidate) { rejected.push({ nationalId, reason: candidateError?.message || "UPSERT_FAILED" }); continue; }
+      const { data: existingRows, error: existingError } = await supabase
+        .from("candidates")
+        .select("id")
+        .eq("phone", phone)
+        .limit(2);
+      if (existingError) { rejected.push({ phone, reason: existingError.message }); continue; }
+      if ((existingRows || []).length > 1) { rejected.push({ phone, reason: "DUPLICATE_PHONE" }); continue; }
 
-      const { error: cycleError } = await supabase.from("cycle_candidates").upsert({ cycle_id: cycleId, candidate_id: candidate.id }, { onConflict: "cycle_id,candidate_id" });
-      if (cycleError) { rejected.push({ nationalId, reason: cycleError.message }); continue; }
+      let candidateId = existingRows?.[0]?.id as string | undefined;
+      if (candidateId) {
+        const { error: updateError } = await supabase.from("candidates").update({
+          full_name: fullName,
+          phone,
+          city: row.city || null,
+          photo_url: row.photoUrl || null,
+          source_data: row.sourceData ?? {},
+          updated_at: new Date().toISOString(),
+        }).eq("id", candidateId);
+        if (updateError) { rejected.push({ phone, reason: updateError.message }); continue; }
+      } else {
+        const internalId = `phone:${phone}`;
+        const { data: candidate, error: candidateError } = await supabase.from("candidates").upsert({
+          national_id: internalId,
+          full_name: fullName,
+          phone,
+          city: row.city || null,
+          photo_url: row.photoUrl || null,
+          source_data: row.sourceData ?? {},
+          updated_at: new Date().toISOString(),
+        }, { onConflict: "national_id" }).select("id").single();
+        if (candidateError || !candidate) { rejected.push({ phone, reason: candidateError?.message || "UPSERT_FAILED" }); continue; }
+        candidateId = candidate.id;
+      }
+
+      const { error: cycleError } = await supabase.from("cycle_candidates").upsert({ cycle_id: cycleId, candidate_id: candidateId }, { onConflict: "cycle_id,candidate_id" });
+      if (cycleError) { rejected.push({ phone, reason: cycleError.message }); continue; }
       imported++;
     }
 
