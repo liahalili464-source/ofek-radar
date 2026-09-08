@@ -15,7 +15,7 @@ export type NormalizedCandidateRow = {
 type FieldKey = "fullName" | "phone" | "city" | "photoUrl";
 
 const fields: { key: FieldKey; label: string; required?: boolean; aliases: string[] }[] = [
-  { key: "fullName", label: "שם מלא", required: true, aliases: ["שם מלא", "שם", "full name", "fullname", "name"] },
+  { key: "fullName", label: "שם מלא", required: true, aliases: ["שם מלא", "שם", "שם מועמד", "שם מועמדת", "full name", "fullname", "name"] },
   { key: "phone", label: "טלפון", required: true, aliases: ["טלפון", "נייד", "טלפון נייד", "מספר טלפון", "phone", "mobile"] },
   { key: "city", label: "עיר מגורים", aliases: ["עיר", "יישוב", "מגורים", "city"] },
   { key: "photoUrl", label: "תמונה / URL", aliases: ["תמונה", "photo", "image", "photo url", "image url"] },
@@ -33,20 +33,45 @@ function normalizePhone(value: string) {
   return digits;
 }
 
-function detectMapping(headers: string[]) {
-  const result: Record<FieldKey, string> = { fullName: "", phone: "", city: "", photoUrl: "" };
-  for (const field of fields) {
-    const match = headers.find((h) => field.aliases.some((a) => normalizeHeader(h) === normalizeHeader(a)));
-    if (match) result[field.key] = match;
-  }
-  return result;
-}
-
 function cell(row: Row, header: string) {
   const v = header ? row[header] : "";
   if (v === null || v === undefined) return "";
   if (typeof v === "number") return String(v).replace(/\.0+$/, "");
   return String(v).trim();
+}
+
+function looksLikePersonName(value: string) {
+  const text = value.trim();
+  if (!text || text.length > 70 || /https?:\/\//i.test(text) || /@/.test(text) || /\d/.test(text)) return false;
+  const words = text.split(/\s+/).filter(Boolean);
+  return words.length >= 2 && words.length <= 6;
+}
+
+function detectMapping(headers: string[], rows: Row[]) {
+  const result: Record<FieldKey, string> = { fullName: "", phone: "", city: "", photoUrl: "" };
+  for (const field of fields) {
+    const match = headers.find((h) => field.aliases.some((a) => normalizeHeader(h) === normalizeHeader(a)));
+    if (match) result[field.key] = match;
+  }
+
+  if (!result.fullName) {
+    const fallback = headers.find((header) => {
+      if (Object.values(result).includes(header)) return false;
+      const values = rows.slice(0, 12).map((row) => cell(row, header)).filter(Boolean);
+      if (values.length < 2) return false;
+      const matches = values.filter(looksLikePersonName).length;
+      return matches / values.length >= 0.7;
+    });
+    if (fallback) result.fullName = fallback;
+  }
+
+  return result;
+}
+
+function headerLabel(header: string) {
+  const trimmed = header.trim();
+  if (!trimmed || /^__EMPTY(?:_\d+)?$/i.test(trimmed)) return "עמודה ללא כותרת";
+  return header;
 }
 
 export function ExcelImporter({ onImport }: { onImport?: (rows: NormalizedCandidateRow[]) => void }) {
@@ -75,7 +100,7 @@ export function ExcelImporter({ onImport }: { onImport?: (rows: NormalizedCandid
       setFileName(file.name);
       setHeaders(h);
       setAllRows(json);
-      setMapping(detectMapping(h));
+      setMapping(detectMapping(h, json));
     } catch (e) {
       setError(e instanceof Error ? e.message : "לא ניתן לקרוא את הקובץ");
     }
@@ -134,7 +159,7 @@ export function ExcelImporter({ onImport }: { onImport?: (rows: NormalizedCandid
                   <label>{field.label}{field.required ? " *" : ""}</label>
                   <select className="select" value={mapping[field.key]} onChange={(e) => setMapping((m) => ({ ...m, [field.key]: e.target.value }))}>
                     <option value="">לא ממופה</option>
-                    {headers.map((h) => <option key={h} value={h}>{h}</option>)}
+                    {headers.map((h, index) => <option key={`${h}-${index}`} value={h}>{headerLabel(h)}</option>)}
                   </select>
                 </div>
               ))}
@@ -156,8 +181,8 @@ export function ExcelImporter({ onImport }: { onImport?: (rows: NormalizedCandid
 
           <div className="table-wrap" style={{ marginTop: 14 }}>
             <table className="table">
-              <thead><tr>{headers.slice(0, 7).map((h) => <th key={h}>{h}</th>)}</tr></thead>
-              <tbody>{allRows.slice(0, 5).map((r, i) => <tr key={i}>{headers.slice(0, 7).map((h) => <td key={h}>{cell(r, h)}</td>)}</tr>)}</tbody>
+              <thead><tr>{headers.slice(0, 7).map((h, i) => <th key={`${h}-${i}`}>{headerLabel(h)}</th>)}</tr></thead>
+              <tbody>{allRows.slice(0, 5).map((r, i) => <tr key={i}>{headers.slice(0, 7).map((h, j) => <td key={`${h}-${j}`}>{cell(r, h)}</td>)}</tr>)}</tbody>
             </table>
           </div>
 
