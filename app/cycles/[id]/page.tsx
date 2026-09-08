@@ -23,15 +23,18 @@ function one<T>(value: T | T[] | null): T | null {
   if (!value) return null;
   return Array.isArray(value) ? value[0] ?? null : value;
 }
-function statusLabel(status: string) {
+function cycleStatusLabel(status: string) {
   if (status === "active") return "פעיל";
   if (status === "draft") return "בתכנון";
   if (status === "completed") return "סגור";
   if (status === "archived") return "ארכיון";
+  return status;
+}
+function interviewStatusLabel(status: string) {
   if (status === "scheduled") return "מתוכנן";
+  if (status === "completed") return "בוצע";
   if (status === "cancelled") return "בוטל";
   if (status === "no_show") return "לא הגיע/ה";
-  if (status === "completed") return "בוצע";
   return status;
 }
 function formatDate(value: string | null) {
@@ -169,7 +172,7 @@ export default function CycleSummaryPage({ params }: { params: Promise<{ id: str
         "מועמד/ת": one(interview.candidates)?.full_name || "",
         "יחידה": one(interview.units)?.name || "",
         "מועד": formatDateTime(interview.starts_at),
-        "סטטוס ראיון": statusLabel(interview.status),
+        "סטטוס ראיון": interviewStatusLabel(interview.status),
         "ציון מקצועי": ev?.professional_score ?? "",
         "ציון אישי": ev?.personal_score ?? "",
         "המלצה": recommendationLabels[ev?.recommendation || ""] || "",
@@ -194,12 +197,12 @@ export default function CycleSummaryPage({ params }: { params: Promise<{ id: str
       {!cycle ? <div className="empty">לא ניתן להציג את המחזור.</div> : <>
         <div className="grid grid-4" style={{ marginBottom: 18 }}><StatCard label="מועמדים במחזור" value={members.length} /><StatCard label="שאלונים הושלמו" value={`${responseCandidateIds.size}/${members.length}`} accent /><StatCard label="ראיונות שבוצעו" value={`${completedInterviews}/${totalInterviews}`} /><StatCard label="חוות דעת התקבלו" value={`${completedEvaluations}/${totalInterviews}`} /></div>
 
-        <section className="card" style={{ marginBottom: 16 }}><div className="row between wrap" style={{ marginBottom: 16 }}><h2 className="section-title" style={{ marginBottom: 0 }}>תמונת מצב של המחזור</h2><StatusBadge status={statusLabel(cycle.status)} /></div><div className="row between"><b style={{ fontSize: 24 }}>{progress}%</b><span className="stat-label">{Math.max(0, totalInterviews - completedInterviews)} ראיונות נשארו</span></div><div className="progress" style={{ height: 10 }}><div style={{ width: `${progress}%` }} /></div><div className="grid grid-3" style={{ marginTop: 20 }}><div className="notice"><div className="stat-label">יחידות במחזור</div><b>{units.length}</b></div><div className="notice"><div className="stat-label">ממתינים לשאלון</div><b>{Math.max(0, members.length - responseCandidateIds.size)}</b></div><div className="notice"><div className="stat-label">פערים לטיפול</div><b>{attentionItems.length}</b></div></div></section>
+        <section className="card" style={{ marginBottom: 16 }}><div className="row between wrap" style={{ marginBottom: 16 }}><h2 className="section-title" style={{ marginBottom: 0 }}>תמונת מצב של המחזור</h2><StatusBadge status={cycleStatusLabel(cycle.status)} /></div><div className="row between"><b style={{ fontSize: 24 }}>{progress}%</b><span className="stat-label">{Math.max(0, totalInterviews - completedInterviews)} ראיונות נשארו</span></div><div className="progress" style={{ height: 10 }}><div style={{ width: `${progress}%` }} /></div><div className="grid grid-3" style={{ marginTop: 20 }}><div className="notice"><div className="stat-label">יחידות במחזור</div><b>{units.length}</b></div><div className="notice"><div className="stat-label">ממתינים לשאלון</div><b>{Math.max(0, members.length - responseCandidateIds.size)}</b></div><div className="notice"><div className="stat-label">פערים לטיפול</div><b>{attentionItems.length}</b></div></div></section>
 
         <section className="card flush" style={{ marginBottom: 16 }}><div className="row between wrap" style={{ padding: 20, paddingBottom: 10 }}><h2 className="section-title" style={{ marginBottom: 0 }}>התקדמות לפי יחידה</h2><Link href={`/schedule?cycle=${id}`} className="btn btn-small">פתיחת לוח הראיונות</Link></div><div className="table-wrap"><table className="table"><thead><tr><th>יחידה</th><th>ראיונות</th><th style={{ minWidth: 210 }}>התקדמות ראיונות</th><th>חוות דעת</th><th style={{ minWidth: 210 }}>התקדמות חו״ד</th><th>דורש טיפול</th><th>מצב</th></tr></thead><tbody>{unitProgress.map((unit) => { const done = unit.total > 0 && unit.interviewProgress === 100 && unit.lateEvaluations === 0; const started = unit.completed > 0 || unit.evaluations > 0; return <tr key={unit.unitId}><td><b>{unit.name}</b></td><td><b>{unit.completed}/{unit.total}</b><div className="stat-label">{unit.remaining} נשארו{unit.noShows ? ` · ${unit.noShows} לא הגיעו` : ""}</div></td><td><div className="stat-label">{unit.interviewProgress}%</div><div className="progress"><div style={{ width: `${unit.interviewProgress}%` }} /></div></td><td><b>{unit.evaluations}/{unit.total}</b></td><td><div className="stat-label">{unit.evaluationProgress}%</div><div className="progress"><div style={{ width: `${unit.evaluationProgress}%`, background: unit.evaluationProgress === 100 ? "var(--success)" : "var(--accent)" }} /></div></td><td>{unit.lateEvaluations > 0 ? <span className="badge danger">{unit.lateEvaluations} חו״ד באיחור</span> : <span className="badge ok">אין פערים</span>}</td><td><span className={`badge ${done ? "ok" : started ? "warn" : ""}`}>{done ? "הושלם" : started ? "בתהליך" : "טרם התחיל"}</span></td></tr>; })}{!unitProgress.length && <tr><td colSpan={7}><div className="empty">עדיין לא נבחרו יחידות למחזור.</div></td></tr>}</tbody></table></div></section>
 
         <div className="grid grid-2">
-          <section className="card flush"><div className="row between" style={{ padding: 20, paddingBottom: 8 }}><h2 className="section-title">ראיונות קרובים</h2><Link className="btn btn-small" href={`/schedule?cycle=${id}`}>פתיחת לוח מלא</Link></div><div className="table-wrap"><table className="table"><thead><tr><th>מועד</th><th>מועמד/ת</th><th>יחידה</th><th>סטטוס</th></tr></thead><tbody>{upcoming.map((x) => <tr key={x.id}><td>{formatDateTime(x.starts_at)}</td><td>{one(x.candidates)?.full_name || "מועמד/ת"}</td><td>{one(x.units)?.name || "יחידה"}</td><td><StatusBadge status={statusLabel(x.status)} /></td></tr>)}{!upcoming.length && <tr><td colSpan={4}><div className="empty">אין ראיונות קרובים להצגה.</div></td></tr>}</tbody></table></div></section>
+          <section className="card flush"><div className="row between" style={{ padding: 20, paddingBottom: 8 }}><h2 className="section-title">ראיונות קרובים</h2><Link className="btn btn-small" href={`/schedule?cycle=${id}`}>פתיחת לוח מלא</Link></div><div className="table-wrap"><table className="table"><thead><tr><th>מועד</th><th>מועמד/ת</th><th>יחידה</th><th>סטטוס</th></tr></thead><tbody>{upcoming.map((x) => <tr key={x.id}><td>{formatDateTime(x.starts_at)}</td><td>{one(x.candidates)?.full_name || "מועמד/ת"}</td><td>{one(x.units)?.name || "יחידה"}</td><td><StatusBadge status={interviewStatusLabel(x.status)} /></td></tr>)}{!upcoming.length && <tr><td colSpan={4}><div className="empty">אין ראיונות קרובים להצגה.</div></td></tr>}</tbody></table></div></section>
 
           <section className="card"><div className="row between wrap"><h2 className="section-title">דורש טיפול</h2><select className="select" style={{ maxWidth: 190 }} value={attentionFilter} onChange={(e) => setAttentionFilter(e.target.value as AttentionFilter)}><option value="all">כל הפערים</option><option value="questionnaire">שאלון חסר</option><option value="evaluation">חוות דעת חסרה</option></select></div><div className="grid">{filteredAttention.slice(0, 12).map((item) => <Link href={`/candidates/${item.candidateId}?cycle=${id}`} className={`notice ${item.severity === "danger" ? "danger" : "warning"}`} key={item.key}><div className="row between wrap"><div><b>{item.candidateName}</b><div className="stat-label" style={{ marginTop: 4 }}>{item.text}</div></div><span className={`badge ${item.severity === "danger" ? "danger" : "warn"}`}>{item.severity === "danger" ? "באיחור" : "קרוב"}</span></div></Link>)}{!filteredAttention.length && <div className="empty">אין כרגע פערים במסנן הזה.</div>}</div></section>
         </div>
