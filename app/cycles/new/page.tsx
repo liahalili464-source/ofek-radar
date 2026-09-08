@@ -230,25 +230,24 @@ export default function NewCyclePage() {
               <div className="field"><label>תאריך התחלה</label><input className="input" type="date" value={startsOn} onChange={(e) => handleStartDate(e.target.value)} /></div>
               <div className="field"><label>תאריך סיום</label><input className="input" type="date" value={endsOn} min={startsOn ? addDays(startsOn, 1) : undefined} onChange={(e) => setEndsOn(e.target.value)} /></div>
             </div>
-            {startsOn && <div className="stat-label">לאחר בחירת תאריך התחלה, תאריך הסיום מוגדר אוטומטית ליום שאחריו וניתן לשנות אותו.</div>}
           </section>
 
           <section className="card">
-            <div className="row between"><div><h2 className="section-title" style={{ marginBottom: 4 }}>2. מועמדים במחזור</h2><div className="stat-label">{editId ? "המועמדים שכבר יובאו נשארים משויכים למחזור." : "העלאת Excel, התאמת עמודות ובדיקת ת.ז כפולות"}</div></div><span className="badge">{candidateCount} מועמדים</span></div>
-            {editId ? <div className="notice" style={{ marginTop: 16 }}><b>{existingCandidateCount} מועמדים כבר משויכים למחזור</b><div className="stat-label" style={{ marginTop: 4 }}>אין צורך לבחור אותם מחדש.</div></div> : <div style={{ marginTop: 16 }}><ExcelImporter onImport={setCandidateRows} /></div>}
+            <div className="row between"><h2 className="section-title" style={{ marginBottom: 4 }}>2. מועמדים במחזור</h2><span className="badge">{candidateCount} מועמדים</span></div>
+            {editId ? <div className="notice" style={{ marginTop: 16 }}><b>{existingCandidateCount} מועמדים כבר משויכים למחזור</b></div> : <div style={{ marginTop: 16 }}><ExcelImporter onImport={setCandidateRows} /></div>}
           </section>
         </div>
 
         <div className="grid" style={{ alignContent: "start" }}>
           <section className="card">
-            <div className="row between"><div><h2 className="section-title" style={{ marginBottom: 4 }}>3. יחידות משתתפות</h2><div className="stat-label">הלוח ייווצר רק עבור היחידות שתסמני כאן.</div></div><span className="badge">{selectedUnitIds.length} נבחרו</span></div>
+            <div className="row between"><h2 className="section-title" style={{ marginBottom: 4 }}>3. יחידות משתתפות</h2><span className="badge">{selectedUnitIds.length} נבחרו</span></div>
             <div className="grid grid-2" style={{ marginTop: 14 }}>
               {loading && <div className="notice">טוען יחידות...</div>}
               {!loading && units.map((unit) => {
                 const hasAccount = accountByUnit.has(unit.id);
                 return <label key={unit.id} className="notice checkbox-row" style={{ opacity: hasAccount ? 1 : .55 }}>
                   <input type="checkbox" disabled={!hasAccount || status === "completed"} checked={selectedUnitIds.includes(unit.id)} onChange={() => toggleUnit(unit.id)} />
-                  <span><b>{unit.name}</b><div className="stat-label">{hasAccount ? "חשבון יחידה פעיל" : "חסר חשבון יחידה"}</div></span>
+                  <span><b>{unit.name}</b>{!hasAccount && <div className="stat-label">חסר חשבון יחידה</div>}</span>
                 </label>;
               })}
             </div>
@@ -272,7 +271,7 @@ export default function NewCyclePage() {
           </section>
 
           <section className="card">
-            <div className="row between"><div><h2 className="section-title" style={{ marginBottom: 4 }}>5. בדיקת קיבולת</h2><div className="stat-label">כל מועמד/ת צריך/ה לפגוש כל יחידה שנבחרה.</div></div><span className={`badge ${report.canGenerate ? "ok" : "warn"}`}>{report.canGenerate ? "אפשר לשבץ" : "נדרשות התאמות"}</span></div>
+            <div className="row between"><h2 className="section-title" style={{ marginBottom: 4 }}>5. בדיקת קיבולת</h2><span className={`badge ${report.canGenerate ? "ok" : "warn"}`}>{report.canGenerate ? "אפשר לשבץ" : "נדרשות התאמות"}</span></div>
             <div className="grid grid-4" style={{ marginTop: 16 }}>
               <div className="notice"><div className="stat-label">מועמדים</div><b>{candidateCount}</b></div>
               <div className="notice"><div className="stat-label">יחידות</div><b>{selectedUnitIds.length}</b></div>
