@@ -69,10 +69,6 @@ export function capacityReport(input: ScheduleInput): CapacityReport {
   const candidateCount = input.candidateNames.length;
   const unitCount = input.units.length;
   const availableRounds = allSlots(input.days, input.durationMinutes).length;
-
-  // Scheduling all edges of a complete bipartite graph K(candidates, units)
-  // needs max(candidates, units) parallel rounds when each candidate and unit
-  // can participate in at most one interview in the same slot.
   const requiredRounds = Math.max(candidateCount, unitCount);
 
   return {
@@ -88,17 +84,10 @@ export function capacityReport(input: ScheduleInput): CapacityReport {
   };
 }
 
-/**
- * Builds a collision-free round-robin schedule.
- *
- * We pad the smaller side (candidates or units) with BYEs up to M=max(N,U),
- * then rotate one side. Across M rounds every real candidate/unit pair appears
- * exactly once, while no candidate or unit is double-booked in a round.
- */
 export function generateSchedule(input: ScheduleInput): ScheduledInterview[] {
   const report = capacityReport(input);
   if (!report.canGenerate) {
-    throw new Error(`אין מספיק סלוטים. חסרים ${report.missingRounds} סלוטים.`);
+    throw new Error(`אין מספיק זמני ראיון. חסרים ${report.missingRounds} זמני ראיון.`);
   }
 
   const slots = allSlots(input.days, input.durationMinutes);
@@ -113,12 +102,7 @@ export function generateSchedule(input: ScheduleInput): ScheduledInterview[] {
       const candidate = candidates[i];
       const unit = units[(i + round) % m];
       if (!candidate || !unit) continue;
-      result.push({
-        ...slot,
-        candidate,
-        unit,
-        round: round + 1,
-      });
+      result.push({ ...slot, candidate, unit, round: round + 1 });
     }
   }
 
