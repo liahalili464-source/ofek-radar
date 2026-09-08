@@ -10,7 +10,6 @@ const TEMPLATE_MODE = "__template__";
 
 const questionnaireTemplate: QuestionnaireQuestion[] = [
   { id: "template_full_name", fieldKey: "full_name", label: "שם מלא", type: "short_text", required: true, mapsToCandidateField: "full_name" },
-  { id: "template_national_id", fieldKey: "national_id", label: "תעודת זהות", type: "short_text", required: true, mapsToCandidateField: "national_id" },
   { id: "template_phone", fieldKey: "phone", label: "טלפון", type: "phone", required: true, mapsToCandidateField: "phone" },
   { id: "template_city", fieldKey: "city", label: "עיר מגורים", type: "short_text", required: false, mapsToCandidateField: "city" },
   { id: "template_education", fieldKey: "education", label: "השכלה", type: "long_text", required: false },
@@ -33,7 +32,6 @@ const typeLabels: Record<QuestionType, string> = {
 const candidateFields = [
   ["", "ללא מיפוי"],
   ["full_name", "שם מלא"],
-  ["national_id", "תעודת זהות"],
   ["phone", "טלפון"],
   ["city", "עיר"],
 ];
