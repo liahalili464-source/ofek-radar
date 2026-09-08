@@ -28,6 +28,7 @@ type Question = {
 
 type Membership = {
   cycle_id: string;
+  candidate_id: string;
   status: string;
 };
 
@@ -47,27 +48,21 @@ type ResolveSuccess = {
 
 type ResolveFailure = {
   ok: false;
-  error: "CANDIDATE_NOT_FOUND" | "NO_ACTIVE_CYCLE" | "CANDIDATE_NOT_IN_ACTIVE_CYCLE" | "QUESTIONNAIRE_NOT_FOUND";
+  error: "CANDIDATE_NOT_FOUND" | "NO_ACTIVE_CYCLE" | "CANDIDATE_NOT_IN_ACTIVE_CYCLE" | "QUESTIONNAIRE_NOT_FOUND" | "AMBIGUOUS_PHONE";
 };
 
 type ResolveResult = ResolveSuccess | ResolveFailure;
 
-function normalizeNationalId(value: unknown) {
-  return String(value ?? "").replace(/\D/g, "");
+function normalizePhone(value: unknown) {
+  let digits = String(value ?? "").replace(/\D/g, "");
+  if (digits.startsWith("00972")) digits = `0${digits.slice(5)}`;
+  else if (digits.startsWith("972")) digits = `0${digits.slice(3)}`;
+  else if (digits.length === 9 && digits.startsWith("5")) digits = `0${digits}`;
+  return digits;
 }
 
-async function resolveCandidate(nationalId: string): Promise<ResolveResult> {
+async function resolveCandidate(phone: string): Promise<ResolveResult> {
   const supabase = createSupabaseAdminClient();
-
-  const { data: candidateData, error: candidateError } = await supabase
-    .from("candidates")
-    .select("id,national_id,full_name,phone,city")
-    .eq("national_id", nationalId)
-    .maybeSingle();
-
-  if (candidateError) throw candidateError;
-  if (!candidateData) return { ok: false, error: "CANDIDATE_NOT_FOUND" };
-  const candidate = candidateData as Candidate;
 
   const { data: activeCycleData, error: cyclesError } = await supabase
     .from("cycles")
@@ -82,13 +77,27 @@ async function resolveCandidate(nationalId: string): Promise<ResolveResult> {
   const cycleIds = activeCycles.map((cycle) => cycle.id);
   const { data: membershipData, error: membershipsError } = await supabase
     .from("cycle_candidates")
-    .select("cycle_id,status")
-    .eq("candidate_id", candidate.id)
+    .select("cycle_id,candidate_id,status")
     .in("cycle_id", cycleIds);
-
   if (membershipsError) throw membershipsError;
+
   const memberships = (membershipData || []) as Membership[];
-  const membershipByCycle = new Map(memberships.map((membership) => [membership.cycle_id, membership]));
+  const candidateIds = [...new Set(memberships.map((membership) => membership.candidate_id))];
+  if (!candidateIds.length) return { ok: false, error: "CANDIDATE_NOT_IN_ACTIVE_CYCLE" };
+
+  const { data: candidateData, error: candidateError } = await supabase
+    .from("candidates")
+    .select("id,national_id,full_name,phone,city")
+    .in("id", candidateIds);
+  if (candidateError) throw candidateError;
+
+  const matchingCandidates = ((candidateData || []) as Candidate[]).filter((candidate) => normalizePhone(candidate.phone) === phone);
+  if (!matchingCandidates.length) return { ok: false, error: "CANDIDATE_NOT_FOUND" };
+  if (matchingCandidates.length > 1) return { ok: false, error: "AMBIGUOUS_PHONE" };
+
+  const candidate = matchingCandidates[0];
+  const candidateMemberships = memberships.filter((membership) => membership.candidate_id === candidate.id);
+  const membershipByCycle = new Map(candidateMemberships.map((membership) => [membership.cycle_id, membership]));
   const cycle = activeCycles.find((item) => membershipByCycle.has(item.id));
   if (!cycle) return { ok: false, error: "CANDIDATE_NOT_IN_ACTIVE_CYCLE" };
 
@@ -113,30 +122,23 @@ async function resolveCandidate(nationalId: string): Promise<ResolveResult> {
     .order("position", { ascending: true });
 
   if (questionsError) throw questionsError;
+  const questions = ((questionData || []) as Question[]).filter((question) => question.field_key !== "national_id" && question.maps_to_candidate_field !== "national_id");
 
-  return {
-    ok: true,
-    supabase,
-    candidate,
-    cycle,
-    membership,
-    questionnaire,
-    questions: (questionData || []) as Question[],
-  };
+  return { ok: true, supabase, candidate, cycle, membership, questionnaire, questions };
 }
 
 function responseForError(code: string) {
-  const status = code === "CANDIDATE_NOT_FOUND" || code === "CANDIDATE_NOT_IN_ACTIVE_CYCLE" ? 404 : 400;
+  const status = ["CANDIDATE_NOT_FOUND", "CANDIDATE_NOT_IN_ACTIVE_CYCLE"].includes(code) ? 404 : 400;
   return NextResponse.json({ error: code }, { status });
 }
 
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const nationalId = normalizeNationalId(body.nationalId);
-    if (nationalId.length < 5) return responseForError("INVALID_NATIONAL_ID");
+    const phone = normalizePhone(body.phone);
+    if (phone.length < 9) return responseForError("INVALID_PHONE");
 
-    const resolved = await resolveCandidate(nationalId);
+    const resolved = await resolveCandidate(phone);
     if (!resolved.ok) return responseForError(resolved.error);
 
     const { supabase, candidate, cycle, membership, questionnaire, questions } = resolved;
@@ -158,7 +160,6 @@ export async function POST(request: Request) {
 
       const candidateValues: Record<string, unknown> = {
         full_name: candidate.full_name,
-        national_id: candidate.national_id,
         phone: candidate.phone,
         city: candidate.city,
       };
@@ -194,16 +195,10 @@ export async function POST(request: Request) {
     const candidateUpdates: Record<string, string> = {};
     for (const question of questions) {
       const mappedField = question.maps_to_candidate_field;
-      if (!mappedField) continue;
-
-      if (mappedField === "national_id") {
-        answers[question.field_key] = candidate.national_id;
-        continue;
-      }
-
-      if (["full_name", "phone", "city"].includes(mappedField)) {
-        const value = answers[question.field_key];
-        if (typeof value === "string" && value.trim()) candidateUpdates[mappedField] = value.trim();
+      if (!["full_name", "phone", "city"].includes(mappedField || "")) continue;
+      const value = answers[question.field_key];
+      if (typeof value === "string" && value.trim()) {
+        candidateUpdates[mappedField as "full_name" | "phone" | "city"] = mappedField === "phone" ? normalizePhone(value) : value.trim();
       }
     }
 
