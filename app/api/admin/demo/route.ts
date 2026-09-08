@@ -15,10 +15,9 @@ const demoCandidates = demoNames.map((fullName, index) => ({
 
 const demoQuestions = [
   { field_key: "full_name", label: "שם מלא", field_type: "short_text", required: true, options: [], position: 0, maps_to_candidate_field: "full_name" },
-  { field_key: "national_id", label: "תעודת זהות", field_type: "short_text", required: true, options: [], position: 1, maps_to_candidate_field: "national_id" },
-  { field_key: "phone", label: "טלפון", field_type: "phone", required: true, options: [], position: 2, maps_to_candidate_field: "phone" },
-  { field_key: "city", label: "עיר מגורים", field_type: "short_text", required: false, options: [], position: 3, maps_to_candidate_field: "city" },
-  { field_key: "motivation", label: "למה מעניין אותך להשתלב ביחידה?", field_type: "long_text", required: true, options: [], position: 4, maps_to_candidate_field: null },
+  { field_key: "phone", label: "טלפון", field_type: "phone", required: true, options: [], position: 1, maps_to_candidate_field: "phone" },
+  { field_key: "city", label: "עיר מגורים", field_type: "short_text", required: false, options: [], position: 2, maps_to_candidate_field: "city" },
+  { field_key: "motivation", label: "למה מעניין אותך להשתלב ביחידה?", field_type: "long_text", required: true, options: [], position: 3, maps_to_candidate_field: null },
 ];
 
 type ProfileUnitJoin = {
@@ -27,7 +26,7 @@ type ProfileUnitJoin = {
   units: { id: string; name: string; active: boolean } | { id: string; name: string; active: boolean }[] | null;
 };
 
-type CreatedCandidate = { id: string; national_id: string; full_name: string };
+type CreatedCandidate = { id: string; national_id: string; full_name: string; phone: string | null };
 
 function one<T>(value: T | T[] | null): T | null {
   if (!value) return null;
@@ -84,7 +83,6 @@ export async function POST() {
         city: candidate.city,
         source_data: {
           "שם מלא": candidate.fullName,
-          "תעודת זהות": candidate.nationalId,
           "טלפון": candidate.phone,
           "עיר": candidate.city,
           "מגמת לימוד": index % 2 === 0 ? "מדעי המחשב" : "אלקטרוניקה",
@@ -94,7 +92,7 @@ export async function POST() {
         updated_at: now,
       })),
       { onConflict: "national_id" }
-    ).select("id,national_id,full_name");
+    ).select("id,national_id,full_name,phone");
     if (candidateError || !candidateRows?.length) throw candidateError || new Error("CANDIDATE_CREATE_FAILED");
 
     const createdCandidates = candidateRows as CreatedCandidate[];
@@ -174,7 +172,7 @@ export async function POST() {
     return NextResponse.json({
       ok: true,
       cycle: { id: cycle.id, name: cycle.name },
-      candidate: { nationalId: testCandidate.national_id, name: testCandidate.full_name },
+      candidate: { phone: testCandidate.phone, name: testCandidate.full_name },
       candidateCount: orderedCandidates.length,
       interviewCount: interviewRows.length,
       unitCount: usableAccounts.length,
