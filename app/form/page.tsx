@@ -25,8 +25,9 @@ type PublicForm = {
 
 function errorText(code?: string) {
   if (code === "NO_ACTIVE_CYCLE" || code === "QUESTIONNAIRE_NOT_FOUND") return "השאלון אינו פתוח כרגע.";
-  if (code === "CANDIDATE_NOT_FOUND" || code === "CANDIDATE_NOT_IN_ACTIVE_CYCLE") return "לא נמצאה התאמה למחזור הפעיל. בדקו את מספר תעודת הזהות.";
-  if (code === "INVALID_NATIONAL_ID") return "יש להזין מספר תעודת זהות תקין.";
+  if (code === "CANDIDATE_NOT_FOUND" || code === "CANDIDATE_NOT_IN_ACTIVE_CYCLE") return "לא נמצאה התאמה למחזור הפעיל. בדקו את מספר הטלפון.";
+  if (code === "AMBIGUOUS_PHONE") return "מספר הטלפון מופיע יותר מפעם אחת במחזור. פנו למדור איתור ומיון.";
+  if (code === "INVALID_PHONE") return "יש להזין מספר טלפון תקין.";
   return "לא הצלחנו לפתוח את השאלון. נסו שוב בעוד רגע.";
 }
 
@@ -36,7 +37,7 @@ function valueAsString(value: unknown) {
 }
 
 export default function PermanentQuestionnairePage() {
-  const [nationalId, setNationalId] = useState("");
+  const [phone, setPhone] = useState("");
   const [form, setForm] = useState<PublicForm | null>(null);
   const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -52,7 +53,7 @@ export default function PermanentQuestionnairePage() {
       const response = await fetch("/api/questionnaire/public", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "load", nationalId }),
+        body: JSON.stringify({ action: "load", phone }),
       });
       const json = await response.json();
       if (!response.ok) throw new Error(json.error || "LOAD_FAILED");
@@ -81,7 +82,7 @@ export default function PermanentQuestionnairePage() {
       const response = await fetch("/api/questionnaire/public", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "submit", nationalId, answers }),
+        body: JSON.stringify({ action: "submit", phone, answers }),
       });
       const json = await response.json();
       if (!response.ok) throw new Error(json.error || "SUBMIT_FAILED");
@@ -97,7 +98,7 @@ export default function PermanentQuestionnairePage() {
     setForm(null);
     setSubmitted(false);
     setError("");
-    setNationalId("");
+    setPhone("");
   }
 
   return (
@@ -107,17 +108,16 @@ export default function PermanentQuestionnairePage() {
       {!form ? (
         <section className="card" style={{ maxWidth: 560, margin: "0 auto" }}>
           <h1 style={{ marginTop: 0 }}>שאלון מועמד</h1>
-          <p className="muted">הזינו תעודת זהות כדי להמשיך.</p>
           <form onSubmit={identify} style={{ marginTop: 22 }}>
             <div className="field">
-              <label>תעודת זהות</label>
+              <label>מספר טלפון</label>
               <input
                 className="input"
-                value={nationalId}
-                onChange={(e) => setNationalId(e.target.value)}
-                inputMode="numeric"
-                autoComplete="off"
-                placeholder="מספר תעודת זהות"
+                value={phone}
+                onChange={(e) => setPhone(e.target.value)}
+                inputMode="tel"
+                autoComplete="tel"
+                placeholder="0501234567"
                 required
                 autoFocus
               />
@@ -153,7 +153,7 @@ export default function PermanentQuestionnairePage() {
               {[...form.questions].sort((a, b) => a.position - b.position).map((question) => {
                 const initial = form.prefill?.[question.field_key];
                 const selectedValues = Array.isArray(initial) ? initial.map(String) : [];
-                const isNationalId = question.maps_to_candidate_field === "national_id";
+                const isPhone = question.maps_to_candidate_field === "phone";
 
                 return (
                   <div className="field" key={question.id}>
@@ -178,7 +178,7 @@ export default function PermanentQuestionnairePage() {
                         className="input"
                         name={question.field_key}
                         required={question.required}
-                        readOnly={isNationalId}
+                        readOnly={isPhone}
                         defaultValue={valueAsString(initial)}
                         type={question.field_type === "date" ? "date" : question.field_type === "number" ? "number" : question.field_type === "email" ? "email" : question.field_type === "phone" ? "tel" : "text"}
                       />
