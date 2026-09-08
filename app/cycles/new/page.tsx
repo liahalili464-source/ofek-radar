@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { AppShell } from "@/components/app-shell";
 import { ExcelImporter, type NormalizedCandidateRow } from "@/components/excel-importer";
 import { createSupabaseBrowserClient } from "@/lib/supabase-client";
-import { capacityReport, type InterviewDay } from "@/lib/scheduling";
+import { capacityReport, type InterviewDay, type TimeRange } from "@/lib/scheduling";
 
 type Unit = { id: string; name: string; code: string | null };
 type UnitAccount = { id: string; unit_id: string | null };
@@ -22,6 +22,27 @@ function addDays(date: string, amount: number) {
   const m = String(d.getMonth() + 1).padStart(2, "0");
   const dd = String(d.getDate()).padStart(2, "0");
   return `${y}-${m}-${dd}`;
+}
+function toMinutes(value: string) { const [h, m] = value.split(":").map(Number); return h * 60 + m; }
+function fromMinutes(value: number) { return `${String(Math.floor(value / 60)).padStart(2, "0")}:${String(value % 60).padStart(2, "0")}`; }
+function fitsInsideDay(day: Pick<InterviewDay, "start" | "end">, range: TimeRange) { return range.start >= day.start && range.end <= day.end && range.start < range.end; }
+function defaultBreakForDay(start: string, end: string): TimeRange[] {
+  return start <= "12:00" && end >= "13:00" ? [{ start: "12:00", end: "13:00" }] : [];
+}
+function suggestedBreak(day: Pick<InterviewDay, "start" | "end">): TimeRange | null {
+  if (day.start <= "12:00" && day.end >= "13:00") return { start: "12:00", end: "13:00" };
+  const start = toMinutes(day.start);
+  const end = toMinutes(day.end);
+  if (end - start < 90) return null;
+  const breakLength = 30;
+  const middle = Math.floor(((start + end - breakLength) / 2) / 15) * 15;
+  return { start: fromMinutes(middle), end: fromMinutes(middle + breakLength) };
+}
+function dayWithAdjustedHours(day: InterviewDay, patch: Partial<InterviewDay>): InterviewDay {
+  const next = { ...day, ...patch };
+  const existing = day.breaks?.[0];
+  if (existing && !fitsInsideDay(next, existing)) next.breaks = [];
+  return next;
 }
 
 export default function NewCyclePage() {
@@ -68,10 +89,18 @@ export default function NewCyclePage() {
         if (editError || !cycleRes.data) { if (!cancelled) { setError(editError?.message || "לא ניתן לטעון את המחזור"); setLoading(false); } return; }
         const cycle = cycleRes.data as ExistingCycle;
         if (!cancelled) {
-          setName(cycle.name); setRecruitmentYear(cycle.recruitment_year); setStartsOn(cycle.starts_on || ""); setEndsOn(cycle.ends_on || "");
-          setStatus(cycle.status === "archived" ? "completed" : cycle.status); setDuration(cycle.interview_duration_minutes || 30);
+          setName(cycle.name);
+          setRecruitmentYear(cycle.recruitment_year);
+          setStartsOn(cycle.starts_on || "");
+          setEndsOn(cycle.ends_on || "");
+          setStatus(cycle.status === "archived" ? "completed" : cycle.status);
+          setDuration(cycle.interview_duration_minutes || 30);
           setSelectedUnitIds(((cycleUnitsRes.data || []) as ExistingUnit[]).map((x) => x.unit_id));
-          setDays(((daysRes.data || []) as ExistingDay[]).map((d) => ({ date: d.interview_date, start: d.starts_at.slice(0, 5), end: d.ends_at.slice(0, 5), breaks: [{ start: "12:00", end: "13:00" }] })));
+          setDays(((daysRes.data || []) as ExistingDay[]).map((d) => {
+            const start = d.starts_at.slice(0, 5);
+            const end = d.ends_at.slice(0, 5);
+            return { date: d.interview_date, start, end, breaks: defaultBreakForDay(start, end) };
+          }));
           setExistingCandidateCount(candidatesRes.count || 0);
         }
       }
@@ -94,14 +123,26 @@ export default function NewCyclePage() {
     setEndsOn((current) => !current || current <= value ? nextDay : current);
   }
   function toggleUnit(unitId: string) { setSelectedUnitIds((current) => current.includes(unitId) ? current.filter((id) => id !== unitId) : [...current, unitId]); }
-  function updateDay(index: number, patch: Partial<InterviewDay>) { setDays((current) => current.map((d, i) => i === index ? { ...d, ...patch } : d)); }
-  function updateBreak(index: number, field: "start" | "end", value: string) {
-    setDays((current) => current.map((d, i) => i === index ? { ...d, breaks: [{ start: field === "start" ? value : d.breaks?.[0]?.start || "12:00", end: field === "end" ? value : d.breaks?.[0]?.end || "13:00" }] } : d));
+  function updateDay(index: number, patch: Partial<InterviewDay>) { setDays((current) => current.map((day, i) => i === index ? dayWithAdjustedHours(day, patch) : day)); }
+  function addBreak(index: number) {
+    setDays((current) => current.map((day, i) => {
+      if (i !== index) return day;
+      const suggestion = suggestedBreak(day);
+      return suggestion ? { ...day, breaks: [suggestion] } : day;
+    }));
   }
+  function updateBreak(index: number, field: "start" | "end", value: string) {
+    setDays((current) => current.map((day, i) => {
+      if (i !== index) return day;
+      const existing = day.breaks?.[0] || suggestedBreak(day);
+      return existing ? { ...day, breaks: [{ ...existing, [field]: value }] } : day;
+    }));
+  }
+  function removeBreak(index: number) { setDays((current) => current.map((day, i) => i === index ? { ...day, breaks: [] } : day)); }
   function addDay() {
     setDays((current) => {
       const nextDate = current.length ? addDays(current[current.length - 1].date, 1) : (startsOn || new Date().toISOString().slice(0, 10));
-      return [...current, { date: nextDate, start: "09:00", end: "16:00", breaks: [{ start: "12:00", end: "13:00" }] }];
+      return [...current, { date: nextDate, start: "09:00", end: "16:00", breaks: defaultBreakForDay("09:00", "16:00") }];
     });
   }
   function removeDay(index: number) { setDays((current) => current.filter((_, i) => i !== index)); }
@@ -114,8 +155,8 @@ export default function NewCyclePage() {
     if (destination === "schedule" && !candidateCount) { setError("כדי ליצור לוח ראיונות יש לייבא קודם מועמדים למחזור."); return; }
     if (destination === "schedule" && !selectedUnitIds.length) { setError("יש לבחור לפחות יחידה אחת למחזור."); return; }
     if (destination === "schedule" && !days.length) { setError("יש להגדיר לפחות יום ראיונות אחד."); return; }
-    const invalidBreak = days.find((d) => d.breaks?.[0] && d.breaks[0].end <= d.breaks[0].start);
-    if (invalidBreak) { setError("שעת סיום ההפסקה חייבת להיות אחרי שעת ההתחלה."); return; }
+    const invalidBreak = days.find((day) => day.breaks?.[0] && !fitsInsideDay(day, day.breaks[0]));
+    if (invalidBreak) { setError("יש הפסקה שנמצאת מחוץ לשעות יום הראיונות. עדכני את שעות ההפסקה או הסירי אותה."); return; }
 
     const missingAccounts = selectedUnits.filter((u) => !accountByUnit.has(u.id));
     if (missingAccounts.length) { setError(`ליחידות ${missingAccounts.map((u) => u.name).join(", ")} אין חשבון יחידה פעיל.`); return; }
@@ -123,7 +164,12 @@ export default function NewCyclePage() {
     setSaving(true);
     try {
       const payload = {
-        id: editId || undefined, name: name.trim(), recruitmentYear, startsOn: startsOn || null, endsOn: endsOn || null, durationMinutes: duration,
+        id: editId || undefined,
+        name: name.trim(),
+        recruitmentYear,
+        startsOn: startsOn || null,
+        endsOn: endsOn || null,
+        durationMinutes: duration,
         status: forceDraft ? "draft" : status,
         units: selectedUnits.map((u) => ({ unitId: u.id, interviewerId: accountByUnit.get(u.id) })),
         days: days.map((d) => ({ date: d.date, start: d.start, end: d.end })),
@@ -157,14 +203,46 @@ export default function NewCyclePage() {
       {error && <div className="notice danger" style={{ marginBottom: 18 }}>{error}</div>}
       <div className="grid grid-2" style={{ alignItems: "start" }}>
         <div className="grid" style={{ alignContent: "start" }}>
-          <section className="card"><h2 className="section-title">1. פרטי המחזור</h2><div className="field"><label>שם המחזור</label><input className="input" value={name} onChange={(e) => setName(e.target.value)} placeholder="לדוגמה: מחזור אוקטובר 2026" /></div><div className="grid grid-2"><div className="field"><label>שנת גיוס</label><input className="input" type="number" value={recruitmentYear} onChange={(e) => setRecruitmentYear(Number(e.target.value))} /></div><div className="field"><label>סטטוס</label><select className="select" value={status} onChange={(e) => setStatus(e.target.value as CycleStatus)}><option value="draft">בתכנון</option><option value="active">פעיל</option><option value="completed">סגור</option></select></div></div><div className="grid grid-2"><div className="field"><label>תאריך התחלה</label><input className="input" type="date" value={startsOn} onChange={(e) => handleStartDate(e.target.value)} /></div><div className="field"><label>תאריך סיום</label><input className="input" type="date" value={endsOn} min={startsOn ? addDays(startsOn, 1) : undefined} onChange={(e) => setEndsOn(e.target.value)} /></div></div></section>
+          <section className="card">
+            <h2 className="section-title">1. פרטי המחזור</h2>
+            <div className="field"><label>שם המחזור</label><input className="input" value={name} onChange={(e) => setName(e.target.value)} placeholder="לדוגמה: מחזור אוקטובר 2026" /></div>
+            <div className="grid grid-2"><div className="field"><label>שנת גיוס</label><input className="input" type="number" value={recruitmentYear} onChange={(e) => setRecruitmentYear(Number(e.target.value))} /></div><div className="field"><label>סטטוס</label><select className="select" value={status} onChange={(e) => setStatus(e.target.value as CycleStatus)}><option value="draft">בתכנון</option><option value="active">פעיל</option><option value="completed">סגור</option></select></div></div>
+            <div className="grid grid-2"><div className="field"><label>תאריך התחלה</label><input className="input" type="date" value={startsOn} onChange={(e) => handleStartDate(e.target.value)} /></div><div className="field"><label>תאריך סיום</label><input className="input" type="date" value={endsOn} min={startsOn ? addDays(startsOn, 1) : undefined} onChange={(e) => setEndsOn(e.target.value)} /></div></div>
+          </section>
           <section className="card"><div className="row between"><h2 className="section-title" style={{ marginBottom: 4 }}>2. מועמדים במחזור</h2><span className="badge">{candidateCount} מועמדים</span></div>{editId ? <div className="notice" style={{ marginTop: 16 }}><b>{existingCandidateCount} מועמדים כבר משויכים למחזור</b></div> : <div style={{ marginTop: 16 }}><ExcelImporter onImport={setCandidateRows} /></div>}</section>
         </div>
 
         <div className="grid" style={{ alignContent: "start" }}>
           <section className="card"><div className="row between"><h2 className="section-title" style={{ marginBottom: 4 }}>3. יחידות משתתפות</h2><span className="badge">{selectedUnitIds.length} נבחרו</span></div><div className="grid grid-2" style={{ marginTop: 14 }}>{loading && <div className="notice">טוען יחידות...</div>}{!loading && units.map((unit) => { const hasAccount = accountByUnit.has(unit.id); return <label key={unit.id} className="notice checkbox-row" style={{ opacity: hasAccount ? 1 : .55 }}><input type="checkbox" disabled={!hasAccount || status === "completed"} checked={selectedUnitIds.includes(unit.id)} onChange={() => toggleUnit(unit.id)} /><span><b>{unit.name}</b>{!hasAccount && <div className="stat-label">חסר חשבון יחידה</div>}</span></label>; })}</div>{status === "completed" && <div className="notice warning" style={{ marginTop: 14 }}>מחזור סגור נשמר לצפייה היסטורית. כדי לשנות שיבוץ או יחידות, החזירי אותו קודם לסטטוס פעיל.</div>}</section>
 
-          <section className="card"><div className="row between"><h2 className="section-title">4. ימי ראיונות</h2><button className="btn btn-small" disabled={status === "completed"} onClick={addDay}>+ הוספת יום</button></div><div className="field"><label>משך כל ראיון</label><select className="select" disabled={status === "completed"} value={duration} onChange={(e) => setDuration(Number(e.target.value))}><option value={20}>20 דקות</option><option value={30}>30 דקות</option><option value={45}>45 דקות</option><option value={60}>60 דקות</option></select></div><div className="grid">{days.map((day, index) => <div className="notice" key={`${day.date}-${index}`}><div className="grid grid-3"><div className="field"><label>תאריך</label><input className="input" type="date" min={startsOn || undefined} max={endsOn || undefined} disabled={status === "completed"} value={day.date} onChange={(e) => updateDay(index, { date: e.target.value })} /></div><div className="field"><label>התחלה</label><input className="input" type="time" disabled={status === "completed"} value={day.start} onChange={(e) => updateDay(index, { start: e.target.value })} /></div><div className="field"><label>סיום</label><input className="input" type="time" disabled={status === "completed"} value={day.end} onChange={(e) => updateDay(index, { end: e.target.value })} /></div></div><div className="grid grid-2"><div className="field"><label>תחילת הפסקה</label><input className="input" type="time" disabled={status === "completed"} value={day.breaks?.[0]?.start || "12:00"} onChange={(e) => updateBreak(index, "start", e.target.value)} /></div><div className="field"><label>סיום הפסקה</label><input className="input" type="time" disabled={status === "completed"} value={day.breaks?.[0]?.end || "13:00"} onChange={(e) => updateBreak(index, "end", e.target.value)} /></div></div><button className="btn btn-small btn-danger" disabled={status === "completed"} onClick={() => removeDay(index)}>הסרה</button></div>)}{!days.length && <div className="empty">לא הוגדרו עדיין ימי ראיונות.</div>}</div></section>
+          <section className="card">
+            <div className="row between"><h2 className="section-title">4. ימי ראיונות</h2><button className="btn btn-small" disabled={status === "completed"} onClick={addDay}>+ הוספת יום</button></div>
+            <div className="field"><label>משך כל ראיון</label><select className="select" disabled={status === "completed"} value={duration} onChange={(e) => setDuration(Number(e.target.value))}><option value={20}>20 דקות</option><option value={30}>30 דקות</option><option value={45}>45 דקות</option><option value={60}>60 דקות</option></select></div>
+            <div className="grid">{days.map((day, index) => {
+              const breakTime = day.breaks?.[0];
+              const canSuggestBreak = Boolean(suggestedBreak(day));
+              return <div className="notice" key={`${day.date}-${index}`}>
+                <div className="grid grid-3">
+                  <div className="field"><label>תאריך</label><input className="input" type="date" min={startsOn || undefined} max={endsOn || undefined} disabled={status === "completed"} value={day.date} onChange={(e) => updateDay(index, { date: e.target.value })} /></div>
+                  <div className="field"><label>התחלה</label><input className="input" type="time" disabled={status === "completed"} value={day.start} onChange={(e) => updateDay(index, { start: e.target.value })} /></div>
+                  <div className="field"><label>סיום</label><input className="input" type="time" disabled={status === "completed"} value={day.end} onChange={(e) => updateDay(index, { end: e.target.value })} /></div>
+                </div>
+
+                <div style={{ borderTop: "1px solid var(--border)", paddingTop: 12, marginTop: 4 }}>
+                  <div className="row between wrap" style={{ marginBottom: breakTime ? 10 : 0 }}>
+                    <div><b>הפסקה</b>{!breakTime && <div className="stat-label">ללא הפסקה ביום הזה</div>}</div>
+                    {breakTime ? <button className="btn btn-small" disabled={status === "completed"} onClick={() => removeBreak(index)}>ללא הפסקה</button> : <button className="btn btn-small" disabled={status === "completed" || !canSuggestBreak} onClick={() => addBreak(index)}>+ הוספת הפסקה</button>}
+                  </div>
+                  {breakTime && <div className="grid grid-2">
+                    <div className="field"><label>תחילת הפסקה</label><input className="input" type="time" min={day.start} max={day.end} disabled={status === "completed"} value={breakTime.start} onChange={(e) => updateBreak(index, "start", e.target.value)} /></div>
+                    <div className="field"><label>סיום הפסקה</label><input className="input" type="time" min={day.start} max={day.end} disabled={status === "completed"} value={breakTime.end} onChange={(e) => updateBreak(index, "end", e.target.value)} /></div>
+                  </div>}
+                </div>
+
+                <button className="btn btn-small btn-danger" disabled={status === "completed"} onClick={() => removeDay(index)}>הסרה</button>
+              </div>;
+            })}{!days.length && <div className="empty">לא הוגדרו עדיין ימי ראיונות.</div>}</div>
+          </section>
 
           <section className="card"><div className="row between"><h2 className="section-title" style={{ marginBottom: 4 }}>5. בדיקת קיבולת</h2><span className={`badge ${report.canGenerate ? "ok" : "warn"}`}>{report.canGenerate ? "אפשר לשבץ" : "נדרשות התאמות"}</span></div><div className="grid grid-4" style={{ marginTop: 16 }}><div className="notice"><div className="stat-label">מועמדים</div><b>{candidateCount}</b></div><div className="notice"><div className="stat-label">יחידות</div><b>{selectedUnitIds.length}</b></div><div className="notice"><div className="stat-label">סה״כ ראיונות</div><b>{report.totalInterviews}</b></div><div className="notice"><div className="stat-label">זמני ראיון זמינים</div><b>{report.availableRounds}</b></div></div>{!report.canGenerate && candidateCount > 0 && selectedUnitIds.length > 0 && status !== "completed" && <div className="notice warning" style={{ marginTop: 14 }}>הוסיפי ימי ראיונות, האריכי שעות או קצרי את משך הראיון כדי לאפשר שיבוץ מלא.</div>}</section>
         </div>
