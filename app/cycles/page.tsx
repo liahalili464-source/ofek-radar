@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Plus } from "lucide-react";
+import { Beaker, Plus, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { AppShell } from "@/components/app-shell";
 import { StatCard } from "@/components/stat-card";
@@ -26,6 +26,13 @@ type CycleView = CycleRow & {
   progress: number;
 };
 
+type DemoCreated = {
+  cycleId: string;
+  cycleName: string;
+  nationalId: string;
+  unitCount: number;
+};
+
 const statusLabel: Record<CycleRow["status"], string> = {
   draft: "בתכנון",
   active: "פעיל",
@@ -45,51 +52,88 @@ export default function CyclesPage() {
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("all");
   const [year, setYear] = useState("all");
+  const [demoBusy, setDemoBusy] = useState(false);
+  const [demoCreated, setDemoCreated] = useState<DemoCreated | null>(null);
 
-  useEffect(() => {
-    let cancelled = false;
-    async function load() {
-      setLoading(true);
-      setError("");
-      const supabase = createSupabaseBrowserClient();
-      const [cyclesRes, candidatesRes, unitsRes, interviewsRes] = await Promise.all([
-        supabase.from("cycles").select("id,name,recruitment_year,starts_on,ends_on,status").order("starts_on", { ascending: false }),
-        supabase.from("cycle_candidates").select("cycle_id,candidate_id"),
-        supabase.from("cycle_units").select("cycle_id,unit_id"),
-        supabase.from("interviews").select("cycle_id,status,starts_at"),
-      ]);
-      const firstError = cyclesRes.error || candidatesRes.error || unitsRes.error || interviewsRes.error;
-      if (firstError) {
-        if (!cancelled) setError(firstError.message);
-        setLoading(false);
-        return;
-      }
-
-      const now = new Date();
-      const weekStart = new Date(now);
-      weekStart.setHours(0, 0, 0, 0);
-      weekStart.setDate(now.getDate() - ((now.getDay() + 6) % 7));
-      const weekEnd = new Date(weekStart);
-      weekEnd.setDate(weekStart.getDate() + 7);
-
-      const rows = ((cyclesRes.data || []) as CycleRow[]).map((cycle) => {
-        const candidates = (candidatesRes.data || []).filter((x) => x.cycle_id === cycle.id).length;
-        const units = (unitsRes.data || []).filter((x) => x.cycle_id === cycle.id).length;
-        const interviews = (interviewsRes.data || []).filter((x) => x.cycle_id === cycle.id);
-        const completedInterviews = interviews.filter((x) => x.status === "completed").length;
-        const interviewsThisWeek = interviews.filter((x) => {
-          const date = new Date(x.starts_at);
-          return date >= weekStart && date < weekEnd;
-        }).length;
-        const progress = interviews.length ? Math.round((completedInterviews / interviews.length) * 100) : 0;
-        return { ...cycle, candidates, units, totalInterviews: interviews.length, completedInterviews, interviewsThisWeek, progress };
-      });
-      if (!cancelled) setCycles(rows);
+  async function load() {
+    setLoading(true);
+    setError("");
+    const supabase = createSupabaseBrowserClient();
+    const [cyclesRes, candidatesRes, unitsRes, interviewsRes] = await Promise.all([
+      supabase.from("cycles").select("id,name,recruitment_year,starts_on,ends_on,status").order("starts_on", { ascending: false }),
+      supabase.from("cycle_candidates").select("cycle_id,candidate_id"),
+      supabase.from("cycle_units").select("cycle_id,unit_id"),
+      supabase.from("interviews").select("cycle_id,status,starts_at"),
+    ]);
+    const firstError = cyclesRes.error || candidatesRes.error || unitsRes.error || interviewsRes.error;
+    if (firstError) {
+      setError(firstError.message);
       setLoading(false);
+      return;
     }
-    load();
-    return () => { cancelled = true; };
-  }, []);
+
+    const now = new Date();
+    const weekStart = new Date(now);
+    weekStart.setHours(0, 0, 0, 0);
+    weekStart.setDate(now.getDate() - ((now.getDay() + 6) % 7));
+    const weekEnd = new Date(weekStart);
+    weekEnd.setDate(weekStart.getDate() + 7);
+
+    const rows = ((cyclesRes.data || []) as CycleRow[]).map((cycle) => {
+      const candidates = (candidatesRes.data || []).filter((x) => x.cycle_id === cycle.id).length;
+      const units = (unitsRes.data || []).filter((x) => x.cycle_id === cycle.id).length;
+      const interviews = (interviewsRes.data || []).filter((x) => x.cycle_id === cycle.id);
+      const completedInterviews = interviews.filter((x) => x.status === "completed").length;
+      const interviewsThisWeek = interviews.filter((x) => {
+        const date = new Date(x.starts_at);
+        return date >= weekStart && date < weekEnd;
+      }).length;
+      const progress = interviews.length ? Math.round((completedInterviews / interviews.length) * 100) : 0;
+      return { ...cycle, candidates, units, totalInterviews: interviews.length, completedInterviews, interviewsThisWeek, progress };
+    });
+    setCycles(rows);
+    setLoading(false);
+  }
+
+  useEffect(() => { load(); }, []);
+
+  async function createDemoCycle() {
+    setDemoBusy(true);
+    setDemoCreated(null);
+    setError("");
+    try {
+      const response = await fetch("/api/admin/demo", { method: "POST" });
+      const json = await response.json();
+      if (!response.ok) throw new Error(json.error || "יצירת מחזור הבדיקה נכשלה");
+      setDemoCreated({
+        cycleId: json.cycle.id,
+        cycleName: json.cycle.name,
+        nationalId: json.candidate.nationalId,
+        unitCount: json.unitCount,
+      });
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "יצירת מחזור הבדיקה נכשלה");
+    } finally {
+      setDemoBusy(false);
+    }
+  }
+
+  async function deleteDemoCycle() {
+    setDemoBusy(true);
+    setError("");
+    try {
+      const response = await fetch("/api/admin/demo", { method: "DELETE" });
+      const json = await response.json();
+      if (!response.ok) throw new Error(json.error || "מחיקת מחזור הבדיקה נכשלה");
+      setDemoCreated(null);
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "מחיקת מחזור הבדיקה נכשלה");
+    } finally {
+      setDemoBusy(false);
+    }
+  }
 
   const years = useMemo(() => [...new Set(cycles.map((c) => c.recruitment_year))].sort((a, b) => b - a), [cycles]);
   const filtered = useMemo(() => cycles.filter((cycle) => {
@@ -103,13 +147,31 @@ export default function CyclesPage() {
   const active = cycles.filter((c) => c.status === "active" || c.status === "draft").length;
   const completed = cycles.filter((c) => c.status === "completed").length;
   const weekly = cycles.reduce((sum, c) => sum + c.interviewsThisWeek, 0);
+  const hasDemo = cycles.some((c) => c.name === "מחזור בדיקה – ספטמבר 2026");
 
   return (
     <AppShell
       title="מחזורי ראיונות"
       subtitle="ניהול ומעקב אחר כלל מחזורי הראיונות הפעילים והסגורים"
-      actions={<Link href="/cycles/new" className="btn btn-primary"><Plus size={17} /> פתיחת מחזור חדש</Link>}
+      actions={<div className="row wrap">
+        <button className="btn" onClick={createDemoCycle} disabled={demoBusy}><Beaker size={17} /> {demoBusy ? "מכין..." : "יצירת מחזור בדיקה"}</button>
+        {hasDemo && <button className="btn btn-danger" onClick={deleteDemoCycle} disabled={demoBusy}><Trash2 size={16} /> מחיקת מחזור בדיקה</button>}
+        <Link href="/cycles/new" className="btn btn-primary"><Plus size={17} /> פתיחת מחזור חדש</Link>
+      </div>}
     >
+      {demoCreated && <div className="notice success" style={{ marginBottom: 18 }}>
+        <div className="row between wrap">
+          <div>
+            <b>{demoCreated.cycleName} נוצר בהצלחה</b>
+            <div className="stat-label" style={{ marginTop: 5 }}>תעודת זהות לבדיקה: <b dir="ltr">{demoCreated.nationalId}</b> · {demoCreated.unitCount} יחידות משויכות</div>
+          </div>
+          <div className="row wrap">
+            <Link className="btn btn-small" href={`/cycles/${demoCreated.cycleId}`}>פתיחת המחזור</Link>
+            <a className="btn btn-small btn-primary" href="/form" target="_blank" rel="noreferrer">בדיקת השאלון</a>
+          </div>
+        </div>
+      </div>}
+
       <div className="grid grid-4" style={{ marginBottom: 24 }}>
         <StatCard label="מחזורים פעילים / בתכנון" value={active} accent />
         <StatCard label="סה״כ מועמדים במחזורים" value={totalCandidates} />
