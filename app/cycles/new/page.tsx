@@ -211,14 +211,13 @@ export default function NewCyclePage() {
   }
 
   const title = editId ? "עריכת מחזור" : "פתיחת מחזור חדש";
-  const subtitle = editId ? "עדכון פרטי המחזור, הסטטוס, היחידות וימי הראיונות" : "הגדרת המחזור, ייבוא המועמדים, בחירת היחידות וימי הראיונות";
 
   return (
-    <AppShell title={title} subtitle={subtitle}>
+    <AppShell title={title}>
       {error && <div className="notice danger" style={{ marginBottom: 18 }}>{error}</div>}
 
-      <div className="grid grid-2">
-        <div className="grid">
+      <div className="grid grid-2" style={{ alignItems: "start" }}>
+        <div className="grid" style={{ alignContent: "start" }}>
           <section className="card">
             <h2 className="section-title">1. פרטי המחזור</h2>
             <div className="field"><label>שם המחזור</label><input className="input" value={name} onChange={(e) => setName(e.target.value)} placeholder="לדוגמה: מחזור אוקטובר 2026" /></div>
