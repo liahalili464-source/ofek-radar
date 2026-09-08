@@ -10,13 +10,11 @@ import { createSupabaseBrowserClient } from "@/lib/supabase-client";
 type CandidateRel = {
   id: string;
   full_name: string;
-  national_id: string;
   phone: string | null;
   city: string | null;
 } | {
   id: string;
   full_name: string;
-  national_id: string;
   phone: string | null;
   city: string | null;
 }[] | null;
@@ -39,7 +37,6 @@ type CandidateView = {
   interviewId: string;
   candidateId: string;
   fullName: string;
-  nationalId: string;
   phone: string | null;
   city: string | null;
   cycleId: string;
@@ -89,7 +86,7 @@ export default function InterviewerCandidatesPage() {
 
       const { data: interviewData, error: interviewError } = await supabase
         .from("interviews")
-        .select("id,candidate_id,cycle_id,starts_at,ends_at,status,location,candidates(id,full_name,national_id,phone,city),cycles(id,name,status)")
+        .select("id,candidate_id,cycle_id,starts_at,ends_at,status,location,candidates(id,full_name,phone,city),cycles(id,name,status)")
         .eq("interviewer_id", user.id)
         .order("starts_at", { ascending: true });
       if (interviewError) {
@@ -125,7 +122,6 @@ export default function InterviewerCandidatesPage() {
           interviewId: row.id,
           candidateId: row.candidate_id,
           fullName: candidate.full_name,
-          nationalId: candidate.national_id,
           phone: candidate.phone,
           city: candidate.city,
           cycleId: row.cycle_id,
@@ -159,7 +155,7 @@ export default function InterviewerCandidatesPage() {
   const cycleRows = useMemo(() => rows.filter((row) => !cycleId || row.cycleId === cycleId), [rows, cycleId]);
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
-    return cycleRows.filter((row) => !q || [row.fullName, row.nationalId, row.phone || "", row.city || ""].some((value) => value.toLowerCase().includes(q)));
+    return cycleRows.filter((row) => !q || [row.fullName, row.phone || "", row.city || ""].some((value) => value.toLowerCase().includes(q)));
   }, [cycleRows, search]);
 
   const completed = cycleRows.filter((x) => x.status === "completed").length;
@@ -180,7 +176,7 @@ export default function InterviewerCandidatesPage() {
           </div>
           <div className="field" style={{ margin: 0, minWidth: 300, flex: 1 }}>
             <label>חיפוש</label>
-            <input className="input" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="שם / ת.ז / טלפון / עיר..." />
+            <input className="input" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="שם / טלפון / עיר..." />
           </div>
         </div>
       </section>
@@ -196,12 +192,11 @@ export default function InterviewerCandidatesPage() {
       <section className="card flush">
         <div className="table-wrap">
           <table className="table">
-            <thead><tr><th>מועמד/ת</th><th>ת.ז</th><th>טלפון</th><th>מועד הראיון</th><th>שאלון</th><th>חוות דעת</th><th>סטטוס</th><th></th></tr></thead>
+            <thead><tr><th>מועמד/ת</th><th>טלפון</th><th>מועד הראיון</th><th>שאלון</th><th>חוות דעת</th><th>סטטוס</th><th></th></tr></thead>
             <tbody>
-              {loading && <tr><td colSpan={8}>טוען מועמדים...</td></tr>}
+              {loading && <tr><td colSpan={7}>טוען מועמדים...</td></tr>}
               {!loading && filtered.map((row) => <tr key={row.interviewId}>
                 <td><b>{row.fullName}</b><div className="stat-label">{row.city || ""}</div></td>
-                <td>{row.nationalId}</td>
                 <td>{row.phone || "—"}</td>
                 <td>{formatDateTime(row.startsAt)}</td>
                 <td><span className={`badge ${row.questionnaireDone ? "ok" : "warn"}`}>{row.questionnaireDone ? "הושלם" : "חסר"}</span></td>
@@ -209,7 +204,7 @@ export default function InterviewerCandidatesPage() {
                 <td><StatusBadge status={statusLabel(row.status)} /></td>
                 <td><Link className="btn btn-small btn-primary" href={`/interviewer/candidates/${row.candidateId}?interview=${row.interviewId}`}>פתיחת כרטיס</Link></td>
               </tr>)}
-              {!loading && !filtered.length && <tr><td colSpan={8}><div className="empty">לא נמצאו מועמדים להצגה.</div></td></tr>}
+              {!loading && !filtered.length && <tr><td colSpan={7}><div className="empty">לא נמצאו מועמדים להצגה.</div></td></tr>}
             </tbody>
           </table>
         </div>
