@@ -8,7 +8,6 @@ import { createSupabaseBrowserClient } from "@/lib/supabase-client";
 
 type Candidate = {
   id: string;
-  national_id: string;
   full_name: string;
   phone: string | null;
   city: string | null;
@@ -106,7 +105,7 @@ export default function InterviewerCandidatePage({ params }: { params: Promise<{
 
       const { data: candidateData, error: candidateError } = await supabase
         .from("candidates")
-        .select("id,national_id,full_name,phone,city,photo_url,source_data")
+        .select("id,full_name,phone,city,photo_url,source_data")
         .eq("id", id)
         .single();
       if (candidateError || !candidateData) {
@@ -238,7 +237,7 @@ export default function InterviewerCandidatePage({ params }: { params: Promise<{
             <div>
               <div className="stat-label" style={{ marginBottom: 4 }}>מועמד/ת</div>
               <h2 style={{ margin: 0, fontSize: 28 }}>{candidate.full_name}</h2>
-              <div className="stat-label" style={{ marginTop: 6 }}>ת.ז {candidate.national_id}{candidate.phone ? ` · ${candidate.phone}` : ""}{candidate.city ? ` · ${candidate.city}` : ""}</div>
+              <div className="stat-label" style={{ marginTop: 6 }}>{candidate.phone || "ללא טלפון"}{candidate.city ? ` · ${candidate.city}` : ""}</div>
             </div>
             <div className="row wrap">
               <StatusBadge status={interviewStatusLabel(interview.status)} />
@@ -259,7 +258,6 @@ export default function InterviewerCandidatePage({ params }: { params: Promise<{
             <h2 className="section-title">פרטים בסיסיים</h2>
             <div className="grid grid-2">
               <div className="field"><label>שם מלא</label><div className="preview-field">{candidate.full_name}</div></div>
-              <div className="field"><label>תעודת זהות</label><div className="preview-field">{candidate.national_id}</div></div>
               <div className="field"><label>טלפון</label><div className="preview-field">{candidate.phone || "—"}</div></div>
               <div className="field"><label>עיר</label><div className="preview-field">{candidate.city || "—"}</div></div>
             </div>
@@ -296,7 +294,7 @@ export default function InterviewerCandidatePage({ params }: { params: Promise<{
 
         {activeTab === "evaluation" && <section className="card" style={{ maxWidth: 900 }}>
           <div className="row between wrap">
-            <div><h2 className="section-title" style={{ marginBottom: 4 }}>חוות דעת לראיון</h2><div className="stat-label">החוות דעת נשמרת תחת חשבון היחידה ובקשר לראיון הזה.</div></div>
+            <div><h2 className="section-title" style={{ marginBottom: 4 }}>חוות דעת לראיון</h2></div>
             {saved && <span className="badge ok">✓ נשמר</span>}
           </div>
           <div className="grid grid-2" style={{ marginTop: 18 }}>
