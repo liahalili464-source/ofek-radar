@@ -3,7 +3,6 @@
 import { useEffect, useMemo, useState } from "react";
 import * as XLSX from "xlsx";
 import { AppShell } from "@/components/app-shell";
-import { StatCard } from "@/components/stat-card";
 import { createSupabaseBrowserClient } from "@/lib/supabase-client";
 import { capacityReport, generateSchedule, validateSchedule, type InterviewDay, type TimeRange } from "@/lib/scheduling";
 
@@ -208,64 +207,82 @@ export default function SchedulePage() {
   }
 
   return (
-    <AppShell title="שיבוץ ראיונות" subtitle="בחירת מחזור ויחידות, בדיקת קיבולת ויצירת לו״ז ללא התנגשויות">
+    <AppShell title="שיבוץ ראיונות">
       {error && <div className="notice danger" style={{ marginBottom: 18 }}>{error}</div>}
 
-      <section className="card" style={{ marginBottom: 18 }}>
+      <section className="card" style={{ marginBottom: 18, overflow: "hidden" }}>
+        <div className="row between wrap" style={{ marginBottom: 16 }}>
+          <h2 className="section-title" style={{ marginBottom: 0 }}>הגדרות לוח הראיונות</h2>
+          <span className={`badge ${report.canGenerate ? "ok" : "warn"}`}>{report.canGenerate ? "מוכן לשיבוץ ראיונות" : "נדרשות התאמות"}</span>
+        </div>
+
         <div className="grid grid-3">
           <div className="field"><label>מחזור</label><select className="select" value={cycleId} onChange={(e) => setCycleId(e.target.value)}>{cycles.length === 0 && <option value="">אין מחזורים</option>}{cycles.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}</select></div>
           <div className="field"><label>מועמדים במחזור</label><div className="preview-field"><b>{candidates.length}</b> מועמדים</div></div>
           <div className="field"><label>משך ראיון</label><select className="select" value={duration} onChange={(e) => { setDuration(Number(e.target.value)); setSaved(false); }}><option value={20}>20 דקות</option><option value={30}>30 דקות</option><option value={45}>45 דקות</option><option value={60}>60 דקות</option></select></div>
         </div>
-      </section>
 
-      <section className="card" style={{ marginBottom: 18 }}>
-        <div className="row between"><h2 className="section-title" style={{ marginBottom: 4 }}>יחידות במחזור</h2><span className="badge">{selectedUnits.length} נבחרו</span></div>
-        <div className="grid grid-4" style={{ marginTop: 14 }}>{units.map((unit) => {
-          const hasAccount = accountByUnit.has(unit.id);
-          const selected = selectedUnitIds.includes(unit.id);
-          const color = selected ? unitColorById.get(unit.id) : undefined;
-          return <label className="notice checkbox-row" key={unit.id} style={{ opacity: hasAccount ? 1 : .55, borderColor: color || undefined, background: color ? `${color}16` : undefined }}><input type="checkbox" checked={selected} disabled={!hasAccount} onChange={() => toggleUnit(unit.id)} /><span><b>{unit.name}</b>{selected && color && <span style={{ display: "inline-block", width: 9, height: 9, borderRadius: 999, background: color, marginInlineStart: 8 }} />}{!hasAccount && <div className="stat-label">חסר חשבון יחידה</div>}</span></label>;
-        })}</div>
-      </section>
+        <div style={{ borderTop: "1px solid var(--border)", paddingTop: 16, marginTop: 2 }}>
+          <div className="row between wrap"><h3 style={{ margin: 0, fontSize: 17 }}>יחידות משתתפות</h3><span className="badge">{selectedUnits.length} נבחרו</span></div>
+          <div className="grid grid-4" style={{ marginTop: 12 }}>{units.map((unit) => {
+            const hasAccount = accountByUnit.has(unit.id);
+            const selected = selectedUnitIds.includes(unit.id);
+            const color = selected ? unitColorById.get(unit.id) : undefined;
+            return <label className="notice checkbox-row" key={unit.id} style={{ opacity: hasAccount ? 1 : .55, padding: 11, minHeight: 48, borderColor: color || undefined, background: color ? `${color}16` : undefined }}><input type="checkbox" checked={selected} disabled={!hasAccount} onChange={() => toggleUnit(unit.id)} /><span><b>{unit.name}</b>{selected && color && <span style={{ display: "inline-block", width: 8, height: 8, borderRadius: 999, background: color, marginInlineStart: 7 }} />}{!hasAccount && <div className="stat-label">חסר חשבון יחידה</div>}</span></label>;
+          })}</div>
+        </div>
 
-      <section className="card" style={{ marginBottom: 18 }}>
-        <div className="row between"><h2 className="section-title" style={{ marginBottom: 4 }}>ימי ראיונות</h2><button className="btn btn-small" onClick={addDay}>+ הוספת יום</button></div>
-        <div className="grid grid-3" style={{ marginTop: 14 }}>{days.map((day, index) => {
-          const breakTime = day.breaks?.[0];
-          const canSuggestBreak = Boolean(suggestedBreak(day));
-          return <div className="notice" key={`${day.date}-${index}`}>
-            <div className="grid grid-3">
-              <div className="field"><label>תאריך</label><input className="input" type="date" value={day.date} onChange={(e) => updateDay(index, { date: e.target.value })} /></div>
-              <div className="field"><label>התחלה</label><input className="input" type="time" value={day.start} onChange={(e) => updateDay(index, { start: e.target.value })} /></div>
-              <div className="field"><label>סיום</label><input className="input" type="time" value={day.end} onChange={(e) => updateDay(index, { end: e.target.value })} /></div>
-            </div>
-
-            <div style={{ borderTop: "1px solid var(--border)", paddingTop: 12, marginTop: 4 }}>
-              <div className="row between wrap" style={{ marginBottom: breakTime ? 10 : 0 }}>
-                <div><b>הפסקה</b>{!breakTime && <div className="stat-label">ללא הפסקה ביום הזה</div>}</div>
-                {breakTime ? <button className="btn btn-small" onClick={() => removeBreak(index)}>ללא הפסקה</button> : <button className="btn btn-small" disabled={!canSuggestBreak} onClick={() => addBreak(index)}>+ הוספת הפסקה</button>}
+        <div style={{ borderTop: "1px solid var(--border)", paddingTop: 16, marginTop: 16 }}>
+          <div className="row between wrap"><h3 style={{ margin: 0, fontSize: 17 }}>ימי ושעות ראיונות</h3><button className="btn btn-small" onClick={addDay}>+ הוספת יום</button></div>
+          <div className="grid grid-2" style={{ marginTop: 12 }}>{days.map((day, index) => {
+            const breakTime = day.breaks?.[0];
+            const canSuggestBreak = Boolean(suggestedBreak(day));
+            return <div className="notice" key={`${day.date}-${index}`} style={{ padding: 13 }}>
+              <div className="grid grid-3">
+                <div className="field"><label>תאריך</label><input className="input" type="date" value={day.date} onChange={(e) => updateDay(index, { date: e.target.value })} /></div>
+                <div className="field"><label>התחלה</label><input className="input" type="time" value={day.start} onChange={(e) => updateDay(index, { start: e.target.value })} /></div>
+                <div className="field"><label>סיום</label><input className="input" type="time" value={day.end} onChange={(e) => updateDay(index, { end: e.target.value })} /></div>
               </div>
-              {breakTime && <div className="grid grid-2">
-                <div className="field"><label>תחילת הפסקה</label><input className="input" type="time" min={day.start} max={day.end} value={breakTime.start} onChange={(e) => updateBreak(index, "start", e.target.value)} /></div>
-                <div className="field"><label>סיום הפסקה</label><input className="input" type="time" min={day.start} max={day.end} value={breakTime.end} onChange={(e) => updateBreak(index, "end", e.target.value)} /></div>
+              <div className="row between wrap" style={{ borderTop: "1px solid var(--border)", paddingTop: 10 }}>
+                <div><b>הפסקה</b><div className="stat-label">{breakTime ? `${breakTime.start}–${breakTime.end}` : "ללא הפסקה"}</div></div>
+                <div className="row wrap">
+                  {breakTime ? <button className="btn btn-small" onClick={() => removeBreak(index)}>הסרת הפסקה</button> : <button className="btn btn-small" disabled={!canSuggestBreak} onClick={() => addBreak(index)}>+ הוספת הפסקה</button>}
+                  <button className="btn btn-small btn-danger" onClick={() => removeDay(index)}>הסרת יום</button>
+                </div>
+              </div>
+              {breakTime && <div className="grid grid-2" style={{ marginTop: 10 }}>
+                <div className="field" style={{ marginBottom: 0 }}><label>תחילת הפסקה</label><input className="input" type="time" min={day.start} max={day.end} value={breakTime.start} onChange={(e) => updateBreak(index, "start", e.target.value)} /></div>
+                <div className="field" style={{ marginBottom: 0 }}><label>סיום הפסקה</label><input className="input" type="time" min={day.start} max={day.end} value={breakTime.end} onChange={(e) => updateBreak(index, "end", e.target.value)} /></div>
               </div>}
-            </div>
-
-            <button className="btn btn-small btn-danger" onClick={() => removeDay(index)}>הסרת יום</button>
-          </div>;
-        })}{!days.length && <div className="empty">עדיין לא הוגדרו ימי ראיונות למחזור.</div>}</div>
+            </div>;
+          })}{!days.length && <div className="empty">עדיין לא הוגדרו ימי ראיונות למחזור.</div>}</div>
+        </div>
       </section>
 
-      <div className="grid grid-4" style={{ marginBottom: 18 }}><StatCard label="סה״כ ראיונות" value={report.totalInterviews} /><StatCard label="זמני ראיון נדרשים" value={report.requiredRounds} /><StatCard label="זמני ראיון זמינים" value={report.availableRounds} accent /><StatCard label="מצב" value={<span style={{ fontSize: 21, color: report.canGenerate ? "var(--success)" : "var(--warning)" }}>{report.canGenerate ? "אפשר לשבץ ראיונות" : "נדרשות התאמות"}</span>} /></div>
+      <div className="kpi-strip">
+        <div><div className="stat-label">סה״כ ראיונות</div><b style={{ fontSize: 22 }}>{report.totalInterviews}</b></div>
+        <div><div className="stat-label">זמני ראיון נדרשים</div><b style={{ fontSize: 22 }}>{report.requiredRounds}</b></div>
+        <div><div className="stat-label">זמני ראיון זמינים</div><b style={{ fontSize: 22 }}>{report.availableRounds}</b></div>
+        <div><div className="stat-label">מצב</div><b style={{ fontSize: 18, color: report.canGenerate ? "var(--success)" : "var(--warning)" }}>{report.canGenerate ? "אפשר לשבץ ראיונות" : "נדרשות התאמות"}</b></div>
+      </div>
+
       {!loading && candidates.length === 0 && <div className="notice warning" style={{ marginBottom: 18 }}>אין מועמדים במחזור הזה. יש לייבא מועמדים לפני יצירת לוח ראיונות.</div>}
       {!report.canGenerate && candidates.length > 0 && selectedUnits.length > 0 && <div className="notice warning" style={{ marginBottom: 18 }}>חסרים {report.missingRounds} זמני ראיון. הוסיפי ימים, האריכי שעות או קצרי את משך הראיון.</div>}
 
-      {!!schedule.length && <section className="card" style={{ minWidth: 0, maxWidth: "100%", overflow: "hidden" }}>
-        <div className="row between wrap" style={{ marginBottom: 16, minWidth: 0 }}><div><h2 className="section-title" style={{ marginBottom: 4 }}>תצוגה מקדימה של לו״ז הראיונות</h2><div className="stat-label">{visibleSchedule.length} מתוך {schedule.length} ראיונות מוצגים</div></div><div className="row wrap"><div className="row wrap" style={{ gap: 6 }}><button className={`btn btn-small ${viewMode === "table" ? "btn-primary" : ""}`} onClick={() => setViewMode("table")}>טבלה לפי יחידה</button><button className={`btn btn-small ${viewMode === "slots" ? "btn-primary" : ""}`} onClick={() => setViewMode("slots")}>לפי שעות</button></div><button className="btn" onClick={exportExcel}>ייצוא Excel</button><button className="btn btn-primary" disabled={saving || !validation?.valid} onClick={saveSchedule}>{saving ? "שומר..." : "אישור ושמירת לו״ז הראיונות"}</button></div></div>
-        <div className="toolbar" style={{ marginBottom: 14, minWidth: 0 }}><select className="select" style={{ maxWidth: 220 }} value={filterUnitId} onChange={(e) => setFilterUnitId(e.target.value)}><option value="all">כל היחידות</option>{selectedUnits.map((unit) => <option key={unit.id} value={unit.id}>{unit.name}</option>)}</select><select className="select" style={{ maxWidth: 190 }} value={filterDay} onChange={(e) => setFilterDay(e.target.value)}><option value="all">כל הימים</option>{dayOptions.map((day) => <option key={day} value={day}>{day}</option>)}</select>{(filterUnitId !== "all" || filterDay !== "all") && <button className="btn btn-small" onClick={() => { setFilterUnitId("all"); setFilterDay("all"); }}>ניקוי סינון</button>}</div>
+      {!!schedule.length && <section className="card" style={{ minWidth: 0, width: "100%", maxWidth: "100%", overflow: "hidden" }}>
+        <div className="row between wrap" style={{ marginBottom: 14 }}>
+          <div><h2 className="section-title" style={{ marginBottom: 3 }}>תצוגה מקדימה של לו״ז הראיונות</h2><div className="stat-label">{visibleSchedule.length} מתוך {schedule.length} ראיונות מוצגים</div></div>
+          <div className="row wrap"><button className="btn" onClick={exportExcel}>ייצוא Excel</button><button className="btn btn-primary" disabled={saving || !validation?.valid} onClick={saveSchedule}>{saving ? "שומר..." : "אישור ושמירת לו״ז הראיונות"}</button></div>
+        </div>
 
-        {viewMode === "table" ? <div className="table-wrap" style={{ width: "100%", maxWidth: "100%", minWidth: 0, overflowX: "auto", overflowY: "hidden" }}><table className="table" style={{ width: "max-content", minWidth: "100%" }}><thead><tr><th style={{ minWidth: 110 }}>תאריך</th><th style={{ minWidth: 100 }}>שעה</th>{visibleUnits.map((unit) => { const color = unitColorById.get(unit.id) || UNIT_COLORS[0]; return <th key={unit.id} style={{ minWidth: 145, borderTop: `3px solid ${color}`, background: `${color}14` }}><span style={{ display: "inline-block", width: 9, height: 9, borderRadius: 999, background: color, marginInlineEnd: 7 }} />{unit.name}</th>; })}</tr></thead><tbody>{grouped.map(([key, meetings]) => { const [date, start, end] = key.split("|"); return <tr key={key}><td><b>{date}</b></td><td>{start}–{end}</td>{visibleUnits.map((unit) => { const meeting = meetings.find((m) => m.unit === unit.id); const color = unitColorById.get(unit.id) || UNIT_COLORS[0]; return <td key={unit.id}>{meeting ? <div style={{ borderInlineStart: `4px solid ${color}`, paddingInlineStart: 10, minHeight: 30, display: "flex", alignItems: "center", whiteSpace: "nowrap" }}><b>{candidateNameById.get(meeting.candidate) || meeting.candidate}</b></div> : <span className="muted">—</span>}</td>; })}</tr>; })}</tbody></table></div> : <div className="grid" style={{ minWidth: 0 }}>{grouped.map(([key, meetings]) => { const [date, start, end] = key.split("|"); return <div className="schedule-slot" key={key}><div className="schedule-slot-head"><span>{date}</span><span>{start}–{end}</span></div><div className="schedule-grid">{meetings.map((m) => { const color = unitColorById.get(m.unit) || UNIT_COLORS[0]; return <div className="schedule-meeting" key={`${m.unit}-${m.candidate}`} style={{ borderInlineStart: `4px solid ${color}`, background: `${color}14` }}><b>{unitNameById.get(m.unit) || m.unit}</b><div style={{ marginTop: 4 }}>{candidateNameById.get(m.candidate) || m.candidate}</div></div>; })}</div></div>; })}</div>}
+        <div className="toolbar" style={{ marginBottom: 14 }}>
+          <div className="row wrap" style={{ gap: 6 }}><button className={`btn btn-small ${viewMode === "table" ? "btn-primary" : ""}`} onClick={() => setViewMode("table")}>טבלה לפי יחידה</button><button className={`btn btn-small ${viewMode === "slots" ? "btn-primary" : ""}`} onClick={() => setViewMode("slots")}>לפי שעות</button></div>
+          <select className="select" style={{ width: 190, maxWidth: "100%" }} value={filterUnitId} onChange={(e) => setFilterUnitId(e.target.value)}><option value="all">כל היחידות</option>{selectedUnits.map((unit) => <option key={unit.id} value={unit.id}>{unit.name}</option>)}</select>
+          <select className="select" style={{ width: 170, maxWidth: "100%" }} value={filterDay} onChange={(e) => setFilterDay(e.target.value)}><option value="all">כל הימים</option>{dayOptions.map((day) => <option key={day} value={day}>{day}</option>)}</select>
+          {(filterUnitId !== "all" || filterDay !== "all") && <button className="btn btn-small" onClick={() => { setFilterUnitId("all"); setFilterDay("all"); }}>ניקוי סינון</button>}
+        </div>
+
+        {viewMode === "table" ? <div className="table-wrap" style={{ border: "1px solid var(--border)", borderRadius: 12 }}><table className="table" style={{ width: "max-content", minWidth: "100%" }}><thead><tr><th style={{ minWidth: 105 }}>תאריך</th><th style={{ minWidth: 95 }}>שעה</th>{visibleUnits.map((unit) => { const color = unitColorById.get(unit.id) || UNIT_COLORS[0]; return <th key={unit.id} style={{ minWidth: 135, borderTop: `3px solid ${color}`, background: `${color}14` }}><span style={{ display: "inline-block", width: 8, height: 8, borderRadius: 999, background: color, marginInlineEnd: 7 }} />{unit.name}</th>; })}</tr></thead><tbody>{grouped.map(([key, meetings]) => { const [date, start, end] = key.split("|"); return <tr key={key}><td><b>{date}</b></td><td>{start}–{end}</td>{visibleUnits.map((unit) => { const meeting = meetings.find((m) => m.unit === unit.id); const color = unitColorById.get(unit.id) || UNIT_COLORS[0]; return <td key={unit.id}>{meeting ? <div style={{ borderInlineStart: `3px solid ${color}`, paddingInlineStart: 8, minHeight: 28, display: "flex", alignItems: "center", whiteSpace: "nowrap" }}><b>{candidateNameById.get(meeting.candidate) || meeting.candidate}</b></div> : <span className="muted">—</span>}</td>; })}</tr>; })}</tbody></table></div> : <div className="grid">{grouped.map(([key, meetings]) => { const [date, start, end] = key.split("|"); return <div className="schedule-slot" key={key}><div className="schedule-slot-head"><span>{date}</span><span>{start}–{end}</span></div><div className="schedule-grid">{meetings.map((m) => { const color = unitColorById.get(m.unit) || UNIT_COLORS[0]; return <div className="schedule-meeting" key={`${m.unit}-${m.candidate}`} style={{ borderInlineStart: `4px solid ${color}`, background: `${color}14` }}><b>{unitNameById.get(m.unit) || m.unit}</b><div style={{ marginTop: 4 }}>{candidateNameById.get(m.candidate) || m.candidate}</div></div>; })}</div></div>; })}</div>}
         {saved && <div className="notice success" style={{ marginTop: 14 }}>✓ לו״ז הראיונות נשמר ויופיע בחשבונות היחידות.</div>}
       </section>}
     </AppShell>
