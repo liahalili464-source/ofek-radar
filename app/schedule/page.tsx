@@ -19,6 +19,7 @@ const UNIT_COLORS = ["#38bdf8", "#a78bfa", "#34d399", "#f59e0b", "#fb7185", "#22
 
 function one<T>(value: T | T[] | null): T | null { if (!value) return null; return Array.isArray(value) ? value[0] ?? null : value; }
 function dateTimeToIso(date: string, time: string) { return new Date(`${date}T${time}:00`).toISOString(); }
+function formatScheduleDay(value: string) { return new Intl.DateTimeFormat("he-IL", { day: "2-digit", month: "2-digit", year: "numeric" }).format(new Date(`${value}T12:00:00`)); }
 function toMinutes(value: string) { const [h, m] = value.split(":").map(Number); return h * 60 + m; }
 function fromMinutes(value: number) { return `${String(Math.floor(value / 60)).padStart(2, "0")}:${String(value % 60).padStart(2, "0")}`; }
 function fitsInsideDay(day: Pick<InterviewDay, "start" | "end">, range: TimeRange) { return range.start >= day.start && range.end <= day.end && range.start < range.end; }
@@ -135,6 +136,9 @@ export default function SchedulePage() {
     return [...map.entries()].sort(([a], [b]) => a.localeCompare(b));
   }, [visibleSchedule]);
   const dayOptions = useMemo(() => [...new Set(schedule.map((x) => x.date))].sort(), [schedule]);
+  const selectedUnitName = filterUnitId === "all" ? "כל היחידות" : unitNameById.get(filterUnitId) || "יחידה";
+  const selectedDayName = filterDay === "all" ? "כל הימים" : formatScheduleDay(filterDay);
+  const hasActiveFilter = filterUnitId !== "all" || filterDay !== "all";
 
   function toggleUnit(id: string) { setSaved(false); setSelectedUnitIds((current) => current.includes(id) ? current.filter((x) => x !== id) : [...current, id]); }
   function addDay() {
@@ -271,18 +275,36 @@ export default function SchedulePage() {
 
       {!!schedule.length && <section className="card" style={{ minWidth: 0, width: "100%", maxWidth: "100%", overflow: "hidden" }}>
         <div className="row between wrap" style={{ marginBottom: 14 }}>
-          <div><h2 className="section-title" style={{ marginBottom: 3 }}>תצוגה מקדימה של לו״ז הראיונות</h2><div className="stat-label">{visibleSchedule.length} מתוך {schedule.length} ראיונות מוצגים</div></div>
+          <div><h2 className="section-title" style={{ marginBottom: 3 }}>תצוגה מקדימה של לו״ז הראיונות</h2><div className="stat-label">בדקי את הלוח לפני השמירה</div></div>
           <div className="row wrap"><button className="btn" onClick={exportExcel}>ייצוא Excel</button><button className="btn btn-primary" disabled={saving || !validation?.valid} onClick={saveSchedule}>{saving ? "שומר..." : "אישור ושמירת לו״ז הראיונות"}</button></div>
         </div>
 
-        <div className="toolbar" style={{ marginBottom: 14 }}>
-          <div className="row wrap" style={{ gap: 6 }}><button className={`btn btn-small ${viewMode === "table" ? "btn-primary" : ""}`} onClick={() => setViewMode("table")}>טבלה לפי יחידה</button><button className={`btn btn-small ${viewMode === "slots" ? "btn-primary" : ""}`} onClick={() => setViewMode("slots")}>לפי שעות</button></div>
-          <select className="select" style={{ width: 190, maxWidth: "100%" }} value={filterUnitId} onChange={(e) => setFilterUnitId(e.target.value)}><option value="all">כל היחידות</option>{selectedUnits.map((unit) => <option key={unit.id} value={unit.id}>{unit.name}</option>)}</select>
-          <select className="select" style={{ width: 170, maxWidth: "100%" }} value={filterDay} onChange={(e) => setFilterDay(e.target.value)}><option value="all">כל הימים</option>{dayOptions.map((day) => <option key={day} value={day}>{day}</option>)}</select>
-          {(filterUnitId !== "all" || filterDay !== "all") && <button className="btn btn-small" onClick={() => { setFilterUnitId("all"); setFilterDay("all"); }}>ניקוי סינון</button>}
+        <div className="notice" style={{ padding: 14, marginBottom: 14, background: "var(--panel-2)" }}>
+          <div className="row between wrap" style={{ marginBottom: 12 }}>
+            <div><b style={{ fontSize: 16 }}>סינון תצוגה</b><div className="stat-label">אפשר לבחור יחידה, יום מסוים או לשלב ביניהם</div></div>
+            <span className="badge">{visibleSchedule.length} מתוך {schedule.length} ראיונות</span>
+          </div>
+          <div className="grid grid-3" style={{ alignItems: "end" }}>
+            <div className="field" style={{ marginBottom: 0 }}>
+              <label>יחידה</label>
+              <select className="select" value={filterUnitId} onChange={(e) => setFilterUnitId(e.target.value)}><option value="all">כל היחידות</option>{selectedUnits.map((unit) => <option key={unit.id} value={unit.id}>{unit.name}</option>)}</select>
+            </div>
+            <div className="field" style={{ marginBottom: 0 }}>
+              <label>יום</label>
+              <select className="select" value={filterDay} onChange={(e) => setFilterDay(e.target.value)}><option value="all">כל הימים</option>{dayOptions.map((day) => <option key={day} value={day}>{formatScheduleDay(day)}</option>)}</select>
+            </div>
+            <div className="field" style={{ marginBottom: 0 }}>
+              <label>תצוגה</label>
+              <div className="row" style={{ gap: 6 }}><button className={`btn btn-small ${viewMode === "table" ? "btn-primary" : ""}`} style={{ flex: 1 }} onClick={() => setViewMode("table")}>לפי יחידה</button><button className={`btn btn-small ${viewMode === "slots" ? "btn-primary" : ""}`} style={{ flex: 1 }} onClick={() => setViewMode("slots")}>לפי שעות</button></div>
+            </div>
+          </div>
+          <div className="row between wrap" style={{ marginTop: 12, paddingTop: 10, borderTop: "1px solid var(--border)" }}>
+            <div className="row wrap" style={{ gap: 7 }}><span className="stat-label">מוצג כרגע:</span><span className="badge">{selectedUnitName}</span><span className="badge">{selectedDayName}</span></div>
+            {hasActiveFilter && <button className="btn btn-small" onClick={() => { setFilterUnitId("all"); setFilterDay("all"); }}>ניקוי סינון</button>}
+          </div>
         </div>
 
-        {viewMode === "table" ? <div className="table-wrap" style={{ border: "1px solid var(--border)", borderRadius: 12 }}><table className="table" style={{ width: "max-content", minWidth: "100%" }}><thead><tr><th style={{ minWidth: 105 }}>תאריך</th><th style={{ minWidth: 95 }}>שעה</th>{visibleUnits.map((unit) => { const color = unitColorById.get(unit.id) || UNIT_COLORS[0]; return <th key={unit.id} style={{ minWidth: 135, borderTop: `3px solid ${color}`, background: `${color}14` }}><span style={{ display: "inline-block", width: 8, height: 8, borderRadius: 999, background: color, marginInlineEnd: 7 }} />{unit.name}</th>; })}</tr></thead><tbody>{grouped.map(([key, meetings]) => { const [date, start, end] = key.split("|"); return <tr key={key}><td><b>{date}</b></td><td>{start}–{end}</td>{visibleUnits.map((unit) => { const meeting = meetings.find((m) => m.unit === unit.id); const color = unitColorById.get(unit.id) || UNIT_COLORS[0]; return <td key={unit.id}>{meeting ? <div style={{ borderInlineStart: `3px solid ${color}`, paddingInlineStart: 8, minHeight: 28, display: "flex", alignItems: "center", whiteSpace: "nowrap" }}><b>{candidateNameById.get(meeting.candidate) || meeting.candidate}</b></div> : <span className="muted">—</span>}</td>; })}</tr>; })}</tbody></table></div> : <div className="grid">{grouped.map(([key, meetings]) => { const [date, start, end] = key.split("|"); return <div className="schedule-slot" key={key}><div className="schedule-slot-head"><span>{date}</span><span>{start}–{end}</span></div><div className="schedule-grid">{meetings.map((m) => { const color = unitColorById.get(m.unit) || UNIT_COLORS[0]; return <div className="schedule-meeting" key={`${m.unit}-${m.candidate}`} style={{ borderInlineStart: `4px solid ${color}`, background: `${color}14` }}><b>{unitNameById.get(m.unit) || m.unit}</b><div style={{ marginTop: 4 }}>{candidateNameById.get(m.candidate) || m.candidate}</div></div>; })}</div></div>; })}</div>}
+        {viewMode === "table" ? <div className="table-wrap" style={{ border: "1px solid var(--border)", borderRadius: 12 }}><table className="table" style={{ width: "max-content", minWidth: "100%" }}><thead><tr><th style={{ minWidth: 105 }}>תאריך</th><th style={{ minWidth: 95 }}>שעה</th>{visibleUnits.map((unit) => { const color = unitColorById.get(unit.id) || UNIT_COLORS[0]; return <th key={unit.id} style={{ minWidth: 135, borderTop: `3px solid ${color}`, background: `${color}14` }}><span style={{ display: "inline-block", width: 8, height: 8, borderRadius: 999, background: color, marginInlineEnd: 7 }} />{unit.name}</th>; })}</tr></thead><tbody>{grouped.map(([key, meetings]) => { const [date, start, end] = key.split("|"); return <tr key={key}><td><b>{formatScheduleDay(date)}</b></td><td>{start}–{end}</td>{visibleUnits.map((unit) => { const meeting = meetings.find((m) => m.unit === unit.id); const color = unitColorById.get(unit.id) || UNIT_COLORS[0]; return <td key={unit.id}>{meeting ? <div style={{ borderInlineStart: `3px solid ${color}`, paddingInlineStart: 8, minHeight: 28, display: "flex", alignItems: "center", whiteSpace: "nowrap" }}><b>{candidateNameById.get(meeting.candidate) || meeting.candidate}</b></div> : <span className="muted">—</span>}</td>; })}</tr>; })}</tbody></table></div> : <div className="grid">{grouped.map(([key, meetings]) => { const [date, start, end] = key.split("|"); return <div className="schedule-slot" key={key}><div className="schedule-slot-head"><span>{formatScheduleDay(date)}</span><span>{start}–{end}</span></div><div className="schedule-grid">{meetings.map((m) => { const color = unitColorById.get(m.unit) || UNIT_COLORS[0]; return <div className="schedule-meeting" key={`${m.unit}-${m.candidate}`} style={{ borderInlineStart: `4px solid ${color}`, background: `${color}14` }}><b>{unitNameById.get(m.unit) || m.unit}</b><div style={{ marginTop: 4 }}>{candidateNameById.get(m.candidate) || m.candidate}</div></div>; })}</div></div>; })}</div>}
         {saved && <div className="notice success" style={{ marginTop: 14 }}>✓ לו״ז הראיונות נשמר ויופיע בחשבונות היחידות.</div>}
       </section>}
     </AppShell>
