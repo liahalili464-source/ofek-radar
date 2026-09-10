@@ -222,49 +222,46 @@ export default function NewCyclePage() {
       {error && <div className="notice danger" style={{ marginBottom: 18 }}>{error}</div>}
 
       <div className="grid" style={{ gap: 18 }}>
-        <section className="card">
-          <h2 className="section-title">1. פרטי המחזור</h2>
-          <div className="grid grid-4">
-            <div className="field" style={{ gridColumn: "span 2" }}><label>שם המחזור</label><input className="input" value={name} onChange={(e) => setName(e.target.value)} placeholder="לדוגמה: מחזור אוקטובר 2026" /></div>
-            <div className="field"><label>שנת גיוס</label><input className="input" type="number" value={recruitmentYear} onChange={(e) => setRecruitmentYear(Number(e.target.value))} /></div>
-            <div className="field"><label>סטטוס</label><select className="select" value={status} onChange={(e) => setStatus(e.target.value as CycleStatus)}><option value="draft">בתכנון</option><option value="active">פעיל</option><option value="completed">סגור</option></select></div>
-            <div className="field" style={{ gridColumn: "span 2" }}><label>תאריך התחלה</label><input className="input" type="date" value={startsOn} onChange={(e) => handleStartDate(e.target.value)} /></div>
-            <div className="field" style={{ gridColumn: "span 2" }}><label>תאריך סיום</label><input className="input" type="date" value={endsOn} min={startsOn ? addDays(startsOn, 1) : undefined} onChange={(e) => setEndsOn(e.target.value)} /></div>
-          </div>
-        </section>
+        <div className="grid grid-2" style={{ gridTemplateColumns: "minmax(0,1.35fr) minmax(300px,.65fr)", alignItems: "start" }}>
+          <section className="card">
+            <h2 className="section-title">1. פרטי המחזור</h2>
+            <div className="grid grid-2">
+              <div className="field" style={{ gridColumn: "1 / -1" }}><label>שם המחזור</label><input className="input" value={name} onChange={(e) => setName(e.target.value)} placeholder="לדוגמה: מחזור אוקטובר 2026" /></div>
+              <div className="field"><label>שנת גיוס</label><input className="input" type="number" value={recruitmentYear} onChange={(e) => setRecruitmentYear(Number(e.target.value))} /></div>
+              <div className="field"><label>סטטוס</label><select className="select" value={status} onChange={(e) => setStatus(e.target.value as CycleStatus)}><option value="draft">בתכנון</option><option value="active">פעיל</option><option value="completed">סגור</option></select></div>
+              <div className="field"><label>תאריך התחלה</label><input className="input" type="date" value={startsOn} onChange={(e) => handleStartDate(e.target.value)} /></div>
+              <div className="field"><label>תאריך סיום</label><input className="input" type="date" value={endsOn} min={startsOn ? addDays(startsOn, 1) : undefined} onChange={(e) => setEndsOn(e.target.value)} /></div>
+            </div>
+          </section>
+
+          <section className="card">
+            <div className="row between wrap"><h2 className="section-title" style={{ marginBottom: 4 }}>2. מועמדים במחזור</h2><span className="badge">{candidateCount}</span></div>
+            {editId ? <div className="notice" style={{ marginTop: 14 }}><div className="stat-label">מועמדים משויכים</div><b style={{ fontSize: 24 }}>{existingCandidateCount}</b></div> : <div style={{ marginTop: 14 }}><ExcelImporter onImport={setCandidateRows} /></div>}
+          </section>
+        </div>
+
+        <div className="grid grid-2" style={{ alignItems: "start" }}>
+          <section className="card">
+            <div className="row between wrap"><h2 className="section-title" style={{ marginBottom: 4 }}>3. יחידות משתתפות</h2><span className="badge">{selectedUnitIds.length} נבחרו</span></div>
+            <div className="grid grid-2" style={{ marginTop: 14 }}>
+              {loading && <div className="notice">טוען יחידות...</div>}
+              {!loading && units.map((unit) => { const hasAccount = accountByUnit.has(unit.id); return <label key={unit.id} className="notice checkbox-row" style={{ opacity: hasAccount ? 1 : .55, padding: 13 }}><input type="checkbox" disabled={!hasAccount || status === "completed"} checked={selectedUnitIds.includes(unit.id)} onChange={() => toggleUnit(unit.id)} /><span><b>{unit.name}</b>{!hasAccount && <div className="stat-label">חסר חשבון יחידה</div>}</span></label>; })}
+            </div>
+          </section>
+
+          <section className="card">
+            <div className="row between wrap">
+              <h2 className="section-title" style={{ marginBottom: 4 }}>4. הקצאות ליחידה במחזור נוכחי</h2>
+              <div className="row wrap"><span className="badge">{totalAllocations} הקצאות</span>{candidateCount > 0 && totalAllocations < candidateCount && <span className="badge warn">{candidateCount - totalAllocations} ללא הקצאה כרגע</span>}{candidateCount > 0 && totalAllocations >= candidateCount && <span className="badge ok">יש הקצאה לכל מועמד</span>}</div>
+            </div>
+            {!selectedUnits.length ? <div className="empty" style={{ marginTop: 14 }}>בחרי יחידות משתתפות כדי להגדיר הקצאות.</div> : <div className="grid grid-2" style={{ marginTop: 14 }}>{selectedUnits.map((unit) => <div className="notice" key={unit.id} style={{ padding: 13 }}><div className="row between" style={{ alignItems: "center" }}><b>{unit.name}</b><div className="field" style={{ margin: 0, width: 130 }}><label>מספר הקצאות</label><input className="input" type="number" min={0} step={1} disabled={status === "completed"} value={allocations[unit.id] ?? "0"} onChange={(e) => updateAllocation(unit.id, e.target.value)} /></div></div></div>)}</div>}
+          </section>
+        </div>
+
+        {status === "completed" && <div className="notice warning">מחזור סגור נשמר לצפייה היסטורית. כדי לשנות יחידות או הקצאות, החזירי אותו קודם לסטטוס פעיל.</div>}
 
         <section className="card">
-          <div className="row between wrap"><h2 className="section-title" style={{ marginBottom: 4 }}>2. מועמדים במחזור</h2><span className="badge">{candidateCount} מועמדים</span></div>
-          {editId ? <div className="notice" style={{ marginTop: 14 }}><b>{existingCandidateCount} מועמדים משויכים למחזור</b></div> : <div style={{ marginTop: 14 }}><ExcelImporter onImport={setCandidateRows} /></div>}
-        </section>
-
-        <section className="card">
-          <div className="row between wrap">
-            <h2 className="section-title" style={{ marginBottom: 4 }}>3. יחידות והקצאות</h2>
-            <div className="row wrap"><span className="badge">{selectedUnitIds.length} יחידות</span><span className="badge">{totalAllocations} תקנים</span>{candidateCount > 0 && totalAllocations < candidateCount && <span className="badge warn">{candidateCount - totalAllocations} ללא תקן כרגע</span>}{candidateCount > 0 && totalAllocations >= candidateCount && <span className="badge ok">מספיק לכל המחזור</span>}</div>
-          </div>
-          <div className="grid grid-4" style={{ marginTop: 14 }}>
-            {loading && <div className="notice">טוען יחידות...</div>}
-            {!loading && units.map((unit) => {
-              const hasAccount = accountByUnit.has(unit.id);
-              const selected = selectedUnitIds.includes(unit.id);
-              return <div key={unit.id} className="notice" style={{ opacity: hasAccount ? 1 : .55, padding: 14 }}>
-                <label className="checkbox-row" style={{ padding: 0, minHeight: 36 }}>
-                  <input type="checkbox" disabled={!hasAccount || status === "completed"} checked={selected} onChange={() => toggleUnit(unit.id)} />
-                  <span><b>{unit.name}</b>{!hasAccount && <div className="stat-label">חסר חשבון יחידה</div>}</span>
-                </label>
-                {selected && <div className="field" style={{ margin: "12px 0 0" }}>
-                  <label>מספר תקנים</label>
-                  <input className="input" style={{ maxWidth: 120 }} type="number" min={0} step={1} disabled={status === "completed"} value={allocations[unit.id] ?? "0"} onChange={(e) => updateAllocation(unit.id, e.target.value)} />
-                </div>}
-              </div>;
-            })}
-          </div>
-          {status === "completed" && <div className="notice warning" style={{ marginTop: 14 }}>מחזור סגור נשמר לצפייה היסטורית. כדי לשנות יחידות או תקנים, החזירי אותו קודם לסטטוס פעיל.</div>}
-        </section>
-
-        <section className="card">
-          <div className="row between wrap"><h2 className="section-title" style={{ marginBottom: 4 }}>4. ימי ראיונות</h2><button className="btn btn-small" disabled={status === "completed"} onClick={addDay}>+ הוספת יום</button></div>
+          <div className="row between wrap"><h2 className="section-title" style={{ marginBottom: 4 }}>5. ימי ראיונות</h2><button className="btn btn-small" disabled={status === "completed"} onClick={addDay}>+ הוספת יום</button></div>
           <div className="field" style={{ maxWidth: 220, marginTop: 14 }}><label>משך כל ראיון</label><select className="select" disabled={status === "completed"} value={duration} onChange={(e) => setDuration(Number(e.target.value))}><option value={20}>20 דקות</option><option value={30}>30 דקות</option><option value={45}>45 דקות</option><option value={60}>60 דקות</option></select></div>
           <div className="grid grid-2" style={{ marginTop: 12 }}>{days.map((day, index) => {
             const breakTime = day.breaks?.[0];
@@ -291,14 +288,14 @@ export default function NewCyclePage() {
         </section>
 
         <section className="card">
-          <div className="row between wrap"><h2 className="section-title" style={{ marginBottom: 4 }}>5. בדיקת קיבולת</h2><span className={`badge ${report.canGenerate ? "ok" : "warn"}`}>{report.canGenerate ? "אפשר לשבץ" : "נדרשות התאמות"}</span></div>
+          <div className="row between wrap"><h2 className="section-title" style={{ marginBottom: 4 }}>6. בדיקת קיבולת ראיונות</h2><span className={`badge ${report.canGenerate ? "ok" : "warn"}`}>{report.canGenerate ? "אפשר לשבץ ראיונות" : "נדרשות התאמות"}</span></div>
           <div className="grid grid-4" style={{ marginTop: 14 }}><div className="notice"><div className="stat-label">מועמדים</div><b>{candidateCount}</b></div><div className="notice"><div className="stat-label">יחידות</div><b>{selectedUnitIds.length}</b></div><div className="notice"><div className="stat-label">סה״כ ראיונות</div><b>{report.totalInterviews}</b></div><div className="notice"><div className="stat-label">זמני ראיון זמינים</div><b>{report.availableRounds}</b></div></div>
-          {!report.canGenerate && candidateCount > 0 && selectedUnitIds.length > 0 && status !== "completed" && <div className="notice warning" style={{ marginTop: 14 }}>הוסיפי ימי ראיונות, האריכי שעות או קצרי את משך הראיון כדי לאפשר שיבוץ מלא.</div>}
+          {!report.canGenerate && candidateCount > 0 && selectedUnitIds.length > 0 && status !== "completed" && <div className="notice warning" style={{ marginTop: 14 }}>הוסיפי ימי ראיונות, האריכי שעות או קצרי את משך הראיון כדי לאפשר שיבוץ ראיונות מלא.</div>}
         </section>
       </div>
 
       <div className="row wrap" style={{ justifyContent: "flex-start", marginTop: 20 }}>
-        {editId ? <><button className="btn btn-primary" disabled={saving} onClick={() => saveCycle("summary")}>{saving ? "שומר..." : status === "completed" ? "שמירת המחזור כסגור" : "שמירת שינויים"}</button>{status !== "completed" && <button className="btn" disabled={saving || !report.canGenerate} onClick={() => saveCycle("schedule")}>שמירה והמשך לשיבוץ</button>}</> : <>{status !== "completed" && <button className="btn btn-primary" disabled={saving || !report.canGenerate} onClick={() => saveCycle("schedule")}>{saving ? "שומר..." : "שמירת המחזור והמשך לשיבוץ"}</button>}<button className={status === "completed" ? "btn btn-primary" : "btn"} disabled={saving} onClick={() => saveCycle("summary", status !== "completed")}>{status === "completed" ? "שמירת מחזור סגור" : "שמירה כטיוטה"}</button></>}
+        {editId ? <><button className="btn btn-primary" disabled={saving} onClick={() => saveCycle("summary")}>{saving ? "שומר..." : status === "completed" ? "שמירת המחזור כסגור" : "שמירת שינויים"}</button>{status !== "completed" && <button className="btn" disabled={saving || !report.canGenerate} onClick={() => saveCycle("schedule")}>שמירה והמשך לשיבוץ ראיונות</button>}</> : <>{status !== "completed" && <button className="btn btn-primary" disabled={saving || !report.canGenerate} onClick={() => saveCycle("schedule")}>{saving ? "שומר..." : "שמירת המחזור והמשך לשיבוץ ראיונות"}</button>}<button className={status === "completed" ? "btn btn-primary" : "btn"} disabled={saving} onClick={() => saveCycle("summary", status !== "completed")}>{status === "completed" ? "שמירת מחזור סגור" : "שמירה כטיוטה"}</button></>}
       </div>
     </AppShell>
   );
