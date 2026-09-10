@@ -222,39 +222,41 @@ export default function NewCyclePage() {
       {error && <div className="notice danger" style={{ marginBottom: 18 }}>{error}</div>}
 
       <div className="grid" style={{ gap: 18 }}>
-        <div className="grid grid-2" style={{ gridTemplateColumns: "minmax(0,1.35fr) minmax(300px,.65fr)", alignItems: "start" }}>
-          <section className="card">
-            <h2 className="section-title">1. פרטי המחזור</h2>
-            <div className="grid grid-2">
-              <div className="field" style={{ gridColumn: "1 / -1" }}><label>שם המחזור</label><input className="input" value={name} onChange={(e) => setName(e.target.value)} placeholder="לדוגמה: מחזור אוקטובר 2026" /></div>
-              <div className="field"><label>שנת גיוס</label><input className="input" type="number" value={recruitmentYear} onChange={(e) => setRecruitmentYear(Number(e.target.value))} /></div>
-              <div className="field"><label>סטטוס</label><select className="select" value={status} onChange={(e) => setStatus(e.target.value as CycleStatus)}><option value="draft">בתכנון</option><option value="active">פעיל</option><option value="completed">סגור</option></select></div>
-              <div className="field"><label>תאריך התחלה</label><input className="input" type="date" value={startsOn} onChange={(e) => handleStartDate(e.target.value)} /></div>
-              <div className="field"><label>תאריך סיום</label><input className="input" type="date" value={endsOn} min={startsOn ? addDays(startsOn, 1) : undefined} onChange={(e) => setEndsOn(e.target.value)} /></div>
-            </div>
-          </section>
+        <section className="card">
+          <div className="row between wrap" style={{ marginBottom: 16 }}>
+            <h2 className="section-title" style={{ marginBottom: 0 }}>1. פרטי המחזור</h2>
+            <div className="row wrap"><span className="badge">{candidateCount} מועמדים</span><span className="badge">{selectedUnitIds.length} יחידות</span></div>
+          </div>
+          <div className="grid grid-4">
+            <div className="field" style={{ gridColumn: "span 2" }}><label>שם המחזור</label><input className="input" value={name} onChange={(e) => setName(e.target.value)} placeholder="לדוגמה: מחזור אוקטובר 2026" /></div>
+            <div className="field"><label>שנת גיוס</label><input className="input" type="number" value={recruitmentYear} onChange={(e) => setRecruitmentYear(Number(e.target.value))} /></div>
+            <div className="field"><label>סטטוס</label><select className="select" value={status} onChange={(e) => setStatus(e.target.value as CycleStatus)}><option value="draft">בתכנון</option><option value="active">פעיל</option><option value="completed">סגור</option></select></div>
+            <div className="field" style={{ gridColumn: "span 2" }}><label>תאריך התחלה</label><input className="input" type="date" value={startsOn} onChange={(e) => handleStartDate(e.target.value)} /></div>
+            <div className="field" style={{ gridColumn: "span 2" }}><label>תאריך סיום</label><input className="input" type="date" value={endsOn} min={startsOn ? addDays(startsOn, 1) : undefined} onChange={(e) => setEndsOn(e.target.value)} /></div>
+          </div>
+        </section>
 
-          <section className="card">
-            <div className="row between wrap"><h2 className="section-title" style={{ marginBottom: 4 }}>2. מועמדים במחזור</h2><span className="badge">{candidateCount}</span></div>
-            {editId ? <div className="notice" style={{ marginTop: 14 }}><div className="stat-label">מועמדים משויכים</div><b style={{ fontSize: 24 }}>{existingCandidateCount}</b></div> : <div style={{ marginTop: 14 }}><ExcelImporter onImport={setCandidateRows} /></div>}
-          </section>
-        </div>
+        <section className="card" style={{ paddingTop: 15, paddingBottom: 15 }}>
+          <div className="row between wrap"><div><h2 className="section-title" style={{ marginBottom: 2 }}>2. מועמדים במחזור</h2>{editId && <div className="stat-label">המועמדים שכבר משויכים למחזור נשארים ללא שינוי במסך הזה</div>}</div><span className="badge">{candidateCount} מועמדים</span></div>
+          {!editId && <div style={{ marginTop: 14 }}><ExcelImporter onImport={setCandidateRows} /></div>}
+        </section>
 
         <div className="grid grid-2" style={{ alignItems: "start" }}>
           <section className="card">
             <div className="row between wrap"><h2 className="section-title" style={{ marginBottom: 4 }}>3. יחידות משתתפות</h2><span className="badge">{selectedUnitIds.length} נבחרו</span></div>
             <div className="grid grid-2" style={{ marginTop: 14 }}>
               {loading && <div className="notice">טוען יחידות...</div>}
-              {!loading && units.map((unit) => { const hasAccount = accountByUnit.has(unit.id); return <label key={unit.id} className="notice checkbox-row" style={{ opacity: hasAccount ? 1 : .55, padding: 13 }}><input type="checkbox" disabled={!hasAccount || status === "completed"} checked={selectedUnitIds.includes(unit.id)} onChange={() => toggleUnit(unit.id)} /><span><b>{unit.name}</b>{!hasAccount && <div className="stat-label">חסר חשבון יחידה</div>}</span></label>; })}
+              {!loading && units.map((unit) => { const hasAccount = accountByUnit.has(unit.id); return <label key={unit.id} className="notice checkbox-row" style={{ opacity: hasAccount ? 1 : .55, padding: 13, minHeight: 58 }}><input type="checkbox" disabled={!hasAccount || status === "completed"} checked={selectedUnitIds.includes(unit.id)} onChange={() => toggleUnit(unit.id)} /><span><b>{unit.name}</b>{!hasAccount && <div className="stat-label">חסר חשבון יחידה</div>}</span></label>; })}
             </div>
           </section>
 
           <section className="card">
             <div className="row between wrap">
               <h2 className="section-title" style={{ marginBottom: 4 }}>4. הקצאות ליחידה במחזור נוכחי</h2>
-              <div className="row wrap"><span className="badge">{totalAllocations} הקצאות</span>{candidateCount > 0 && totalAllocations < candidateCount && <span className="badge warn">{candidateCount - totalAllocations} ללא הקצאה כרגע</span>}{candidateCount > 0 && totalAllocations >= candidateCount && <span className="badge ok">יש הקצאה לכל מועמד</span>}</div>
+              <span className="badge">{totalAllocations} הקצאות</span>
             </div>
-            {!selectedUnits.length ? <div className="empty" style={{ marginTop: 14 }}>בחרי יחידות משתתפות כדי להגדיר הקצאות.</div> : <div className="grid grid-2" style={{ marginTop: 14 }}>{selectedUnits.map((unit) => <div className="notice" key={unit.id} style={{ padding: 13 }}><div className="row between" style={{ alignItems: "center" }}><b>{unit.name}</b><div className="field" style={{ margin: 0, width: 130 }}><label>מספר הקצאות</label><input className="input" type="number" min={0} step={1} disabled={status === "completed"} value={allocations[unit.id] ?? "0"} onChange={(e) => updateAllocation(unit.id, e.target.value)} /></div></div></div>)}</div>}
+            {candidateCount > 0 && <div style={{ marginTop: 10 }}>{totalAllocations < candidateCount ? <span className="badge warn">{candidateCount - totalAllocations} מועמדים ללא הקצאה כרגע</span> : <span className="badge ok">יש הקצאה לכל מועמד</span>}</div>}
+            {!selectedUnits.length ? <div className="empty" style={{ marginTop: 14 }}>בחרי יחידות משתתפות כדי להגדיר הקצאות.</div> : <div className="grid grid-2" style={{ marginTop: 14 }}>{selectedUnits.map((unit) => <div className="notice" key={unit.id} style={{ padding: 13, minHeight: 58 }}><div className="row between" style={{ alignItems: "center", height: "100%" }}><b>{unit.name}</b><div className="field" style={{ margin: 0, width: 112 }}><label>מספר הקצאות</label><input className="input" type="number" min={0} step={1} disabled={status === "completed"} value={allocations[unit.id] ?? "0"} onChange={(e) => updateAllocation(unit.id, e.target.value)} /></div></div></div>)}</div>}
           </section>
         </div>
 
