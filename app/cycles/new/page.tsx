@@ -13,6 +13,7 @@ type CycleStatus = "draft" | "active" | "completed";
 type ExistingCycle = { id: string; name: string; recruitment_year: number; starts_on: string | null; ends_on: string | null; status: CycleStatus | "archived"; interview_duration_minutes: number };
 type ExistingUnit = { unit_id: string };
 type ExistingDay = { interview_date: string; starts_at: string; ends_at: string };
+type AdminConfig = { allocations?: Record<string, number> };
 
 function addDays(date: string, amount: number) {
   if (!date) return "";
@@ -58,6 +59,7 @@ export default function NewCyclePage() {
   const [units, setUnits] = useState<Unit[]>([]);
   const [accounts, setAccounts] = useState<UnitAccount[]>([]);
   const [selectedUnitIds, setSelectedUnitIds] = useState<string[]>([]);
+  const [allocations, setAllocations] = useState<Record<string, string>>({});
   const [duration, setDuration] = useState(30);
   const [days, setDays] = useState<InterviewDay[]>([]);
   const [loading, setLoading] = useState(true);
@@ -79,15 +81,17 @@ export default function NewCyclePage() {
       if (!cancelled) { setUnits((unitsRes.data || []) as Unit[]); setAccounts((accountsRes.data || []) as UnitAccount[]); }
 
       if (currentEditId) {
-        const [cycleRes, cycleUnitsRes, daysRes, candidatesRes] = await Promise.all([
+        const [cycleRes, cycleUnitsRes, daysRes, candidatesRes, configRes] = await Promise.all([
           supabase.from("cycles").select("id,name,recruitment_year,starts_on,ends_on,status,interview_duration_minutes").eq("id", currentEditId).single(),
           supabase.from("cycle_units").select("unit_id").eq("cycle_id", currentEditId),
           supabase.from("interview_days").select("interview_date,starts_at,ends_at").eq("cycle_id", currentEditId).order("interview_date"),
           supabase.from("cycle_candidates").select("candidate_id", { count: "exact", head: true }).eq("cycle_id", currentEditId),
+          fetch(`/api/admin/cycle-config?cycleId=${encodeURIComponent(currentEditId)}`),
         ]);
         const editError = cycleRes.error || cycleUnitsRes.error || daysRes.error || candidatesRes.error;
         if (editError || !cycleRes.data) { if (!cancelled) { setError(editError?.message || "לא ניתן לטעון את המחזור"); setLoading(false); } return; }
         const cycle = cycleRes.data as ExistingCycle;
+        const config = configRes.ok ? await configRes.json() as AdminConfig : { allocations: {} };
         if (!cancelled) {
           setName(cycle.name);
           setRecruitmentYear(cycle.recruitment_year);
@@ -95,7 +99,9 @@ export default function NewCyclePage() {
           setEndsOn(cycle.ends_on || "");
           setStatus(cycle.status === "archived" ? "completed" : cycle.status);
           setDuration(cycle.interview_duration_minutes || 30);
-          setSelectedUnitIds(((cycleUnitsRes.data || []) as ExistingUnit[]).map((x) => x.unit_id));
+          const selected = ((cycleUnitsRes.data || []) as ExistingUnit[]).map((x) => x.unit_id);
+          setSelectedUnitIds(selected);
+          setAllocations(Object.fromEntries(selected.map((unitId) => [unitId, String(config.allocations?.[unitId] ?? 0)])));
           setDays(((daysRes.data || []) as ExistingDay[]).map((d) => {
             const start = d.starts_at.slice(0, 5);
             const end = d.ends_at.slice(0, 5);
@@ -113,6 +119,7 @@ export default function NewCyclePage() {
   const accountByUnit = useMemo(() => new Map(accounts.filter((a) => a.unit_id).map((a) => [a.unit_id as string, a.id])), [accounts]);
   const selectedUnits = useMemo(() => units.filter((u) => selectedUnitIds.includes(u.id)), [units, selectedUnitIds]);
   const candidateCount = editId ? existingCandidateCount : candidateRows.length;
+  const totalAllocations = useMemo(() => selectedUnitIds.reduce((sum, unitId) => sum + Math.max(0, Number(allocations[unitId] || 0)), 0), [selectedUnitIds, allocations]);
   const input = useMemo(() => ({ candidateNames: Array.from({ length: candidateCount }, (_, i) => `candidate-${i}`), units: selectedUnitIds, days, durationMinutes: duration }), [candidateCount, selectedUnitIds, days, duration]);
   const report = useMemo(() => capacityReport(input), [input]);
 
@@ -122,7 +129,15 @@ export default function NewCyclePage() {
     const nextDay = addDays(value, 1);
     setEndsOn((current) => !current || current <= value ? nextDay : current);
   }
-  function toggleUnit(unitId: string) { setSelectedUnitIds((current) => current.includes(unitId) ? current.filter((id) => id !== unitId) : [...current, unitId]); }
+  function toggleUnit(unitId: string) {
+    const selected = selectedUnitIds.includes(unitId);
+    setSelectedUnitIds((current) => selected ? current.filter((id) => id !== unitId) : [...current, unitId]);
+    if (!selected) setAllocations((current) => ({ ...current, [unitId]: current[unitId] ?? "0" }));
+  }
+  function updateAllocation(unitId: string, value: string) {
+    if (value !== "" && (!/^\d+$/.test(value) || Number(value) < 0)) return;
+    setAllocations((current) => ({ ...current, [unitId]: value }));
+  }
   function updateDay(index: number, patch: Partial<InterviewDay>) { setDays((current) => current.map((day, i) => i === index ? dayWithAdjustedHours(day, patch) : day)); }
   function addBreak(index: number) {
     setDays((current) => current.map((day, i) => {
@@ -180,6 +195,10 @@ export default function NewCyclePage() {
       const cycleId = (cycleJson.cycle?.id || editId) as string | undefined;
       if (!cycleId) throw new Error("לא התקבל מזהה למחזור");
 
+      const allocationPayload = Object.fromEntries(selectedUnitIds.map((unitId) => [unitId, Math.max(0, Math.floor(Number(allocations[unitId] || 0)))]));
+      const configResponse = await fetch("/api/admin/cycle-config", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ cycleId, allocations: allocationPayload }) });
+      if (!configResponse.ok) throw new Error("שמירת ההקצאות נכשלה");
+
       if (!editId && candidateRows.length) {
         const importResponse = await fetch("/api/admin/candidates/import", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ cycleId, rows: candidateRows, fileName: "candidates.xlsx" }) });
         const importJson = await importResponse.json();
@@ -216,7 +235,12 @@ export default function NewCyclePage() {
           <section className="card"><div className="row between"><h2 className="section-title" style={{ marginBottom: 4 }}>3. יחידות משתתפות</h2><span className="badge">{selectedUnitIds.length} נבחרו</span></div><div className="grid grid-2" style={{ marginTop: 14 }}>{loading && <div className="notice">טוען יחידות...</div>}{!loading && units.map((unit) => { const hasAccount = accountByUnit.has(unit.id); return <label key={unit.id} className="notice checkbox-row" style={{ opacity: hasAccount ? 1 : .55 }}><input type="checkbox" disabled={!hasAccount || status === "completed"} checked={selectedUnitIds.includes(unit.id)} onChange={() => toggleUnit(unit.id)} /><span><b>{unit.name}</b>{!hasAccount && <div className="stat-label">חסר חשבון יחידה</div>}</span></label>; })}</div>{status === "completed" && <div className="notice warning" style={{ marginTop: 14 }}>מחזור סגור נשמר לצפייה היסטורית. כדי לשנות שיבוץ או יחידות, החזירי אותו קודם לסטטוס פעיל.</div>}</section>
 
           <section className="card">
-            <div className="row between"><h2 className="section-title">4. ימי ראיונות</h2><button className="btn btn-small" disabled={status === "completed"} onClick={addDay}>+ הוספת יום</button></div>
+            <div className="row between wrap"><h2 className="section-title" style={{ marginBottom: 4 }}>4. הקצאות ותקנים</h2><div className="row wrap"><span className="badge">{totalAllocations} תקנים</span>{candidateCount > 0 && totalAllocations < candidateCount && <span className="badge warn">{candidateCount - totalAllocations} ללא תקן כרגע</span>}{candidateCount > 0 && totalAllocations >= candidateCount && <span className="badge ok">מספיק לכל המחזור</span>}</div></div>
+            {!selectedUnits.length ? <div className="empty" style={{ marginTop: 14 }}>בחרי יחידות משתתפות כדי להגדיר להן תקנים.</div> : <div className="grid grid-2" style={{ marginTop: 14 }}>{selectedUnits.map((unit) => <div className="notice" key={unit.id}><div className="row between" style={{ alignItems: "center" }}><b>{unit.name}</b><div className="field" style={{ margin: 0, width: 120 }}><label>מספר תקנים</label><input className="input" type="number" min={0} step={1} disabled={status === "completed"} value={allocations[unit.id] ?? "0"} onChange={(e) => updateAllocation(unit.id, e.target.value)} /></div></div></div>)}</div>}
+          </section>
+
+          <section className="card">
+            <div className="row between"><h2 className="section-title">5. ימי ראיונות</h2><button className="btn btn-small" disabled={status === "completed"} onClick={addDay}>+ הוספת יום</button></div>
             <div className="field"><label>משך כל ראיון</label><select className="select" disabled={status === "completed"} value={duration} onChange={(e) => setDuration(Number(e.target.value))}><option value={20}>20 דקות</option><option value={30}>30 דקות</option><option value={45}>45 דקות</option><option value={60}>60 דקות</option></select></div>
             <div className="grid">{days.map((day, index) => {
               const breakTime = day.breaks?.[0];
@@ -244,7 +268,7 @@ export default function NewCyclePage() {
             })}{!days.length && <div className="empty">לא הוגדרו עדיין ימי ראיונות.</div>}</div>
           </section>
 
-          <section className="card"><div className="row between"><h2 className="section-title" style={{ marginBottom: 4 }}>5. בדיקת קיבולת</h2><span className={`badge ${report.canGenerate ? "ok" : "warn"}`}>{report.canGenerate ? "אפשר לשבץ" : "נדרשות התאמות"}</span></div><div className="grid grid-4" style={{ marginTop: 16 }}><div className="notice"><div className="stat-label">מועמדים</div><b>{candidateCount}</b></div><div className="notice"><div className="stat-label">יחידות</div><b>{selectedUnitIds.length}</b></div><div className="notice"><div className="stat-label">סה״כ ראיונות</div><b>{report.totalInterviews}</b></div><div className="notice"><div className="stat-label">זמני ראיון זמינים</div><b>{report.availableRounds}</b></div></div>{!report.canGenerate && candidateCount > 0 && selectedUnitIds.length > 0 && status !== "completed" && <div className="notice warning" style={{ marginTop: 14 }}>הוסיפי ימי ראיונות, האריכי שעות או קצרי את משך הראיון כדי לאפשר שיבוץ מלא.</div>}</section>
+          <section className="card"><div className="row between"><h2 className="section-title" style={{ marginBottom: 4 }}>6. בדיקת קיבולת</h2><span className={`badge ${report.canGenerate ? "ok" : "warn"}`}>{report.canGenerate ? "אפשר לשבץ" : "נדרשות התאמות"}</span></div><div className="grid grid-4" style={{ marginTop: 16 }}><div className="notice"><div className="stat-label">מועמדים</div><b>{candidateCount}</b></div><div className="notice"><div className="stat-label">יחידות</div><b>{selectedUnitIds.length}</b></div><div className="notice"><div className="stat-label">סה״כ ראיונות</div><b>{report.totalInterviews}</b></div><div className="notice"><div className="stat-label">זמני ראיון זמינים</div><b>{report.availableRounds}</b></div></div>{!report.canGenerate && candidateCount > 0 && selectedUnitIds.length > 0 && status !== "completed" && <div className="notice warning" style={{ marginTop: 14 }}>הוסיפי ימי ראיונות, האריכי שעות או קצרי את משך הראיון כדי לאפשר שיבוץ מלא.</div>}</section>
         </div>
       </div>
 
