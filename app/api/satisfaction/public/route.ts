@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { resolveLatestCandidateCycle } from "@/lib/public-candidate-cycle";
 
+const MASTER_PREVIEW_CODE = "1905";
 const RATING_KEYS = ["intake_experience", "info_clarity", "interviewer_professionalism", "fairness", "questions_space"] as const;
 const TEXT_KEYS = ["overall_feeling", "contact_person", "surprise", "preserve", "improve", "additional"] as const;
 
@@ -15,6 +16,21 @@ function errorResponse(error: string, status = 400) {
 export async function POST(request: Request) {
   try {
     const body = await request.json();
+    const rawPhone = String(body.phone ?? "").replace(/\D/g, "");
+
+    if (rawPhone === MASTER_PREVIEW_CODE) {
+      if (body.action === "load") {
+        return NextResponse.json({
+          cycleName: "תצוגת IT · ללא שיוך למחזור",
+          prefill: {},
+          previouslySubmitted: false,
+          previewOnly: true,
+        });
+      }
+      if (body.action === "submit") return NextResponse.json({ ok: true, previewOnly: true });
+      return errorResponse("INVALID_ACTION");
+    }
+
     const resolved = await resolveLatestCandidateCycle(body.phone);
     if (!resolved.ok) return errorResponse(resolved.error, resolved.error === "CANDIDATE_NOT_FOUND" ? 404 : 400);
     const { supabase, candidate, cycle, questionnaire } = resolved;
