@@ -1,11 +1,13 @@
 import { NextResponse } from "next/server";
 import { createSupabaseAdminClient, requireAdmin } from "@/lib/supabase-server";
 
+const MAINTENANCE_USERNAME = "lia";
+
 export async function GET() {
   try {
     const { supabase } = await requireAdmin();
     const [usersRes, unitsRes] = await Promise.all([
-      supabase.from("profiles").select("id,username,full_name,role,active,unit_id,units(name)").order("role").order("username"),
+      supabase.from("profiles").select("id,username,full_name,role,active,unit_id,units(name)").neq("username", MAINTENANCE_USERNAME).order("role").order("username"),
       supabase.from("units").select("id,name,code,active").eq("active", true).order("name"),
     ]);
     const firstError = usersRes.error || unitsRes.error;
