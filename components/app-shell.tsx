@@ -99,8 +99,15 @@ export function AppShell({
   return (
     <div className="shell">
       <aside className="sidebar">
-        <Link href={homeHref} aria-label="OFEK RADAR home">
-          <Image className="logo" src="/ofek-radar-logo.png" alt="OFEK RADAR" width={632} height={223} priority />
+        <Link href={homeHref} aria-label="OFEK RADAR home" style={{ display: "block" }}>
+          <Image
+            src="/ofek-radar-logo.png"
+            alt="OFEK RADAR"
+            width={1619}
+            height={971}
+            priority
+            style={{ width: 178, height: 90, objectFit: "cover", objectPosition: "50% 42%", display: "block", margin: "0 auto 24px" }}
+          />
         </Link>
         <nav className="nav">
           {nav.map(({ href, label, icon: Icon }) => {
