@@ -13,7 +13,10 @@ type CycleStatus = "draft" | "active" | "completed";
 type ExistingCycle = { id: string; name: string; recruitment_year: number; starts_on: string | null; ends_on: string | null; status: CycleStatus | "archived"; interview_duration_minutes: number };
 type ExistingUnit = { unit_id: string };
 type ExistingDay = { interview_date: string; starts_at: string; ends_at: string };
-type AdminConfig = { allocations?: Record<string, number> };
+type AdminConfig = { allocations?: Record<string, number>; cycleMeta?: { arrivalDates?: string[]; populationType?: string } };
+
+const POPULATION_OPTIONS = ["עתודאים", "אקדמיזטורים", "תוכניתנים"];
+const CUSTOM_POPULATION = "__custom__";
 
 function addDays(date: string, amount: number) {
   if (!date) return "";
@@ -50,7 +53,10 @@ export default function NewCyclePage() {
   const router = useRouter();
   const [editId, setEditId] = useState("");
   const [name, setName] = useState("");
-  const [recruitmentYear, setRecruitmentYear] = useState(new Date().getFullYear());
+  const [legacyRecruitmentYear, setLegacyRecruitmentYear] = useState(new Date().getFullYear());
+  const [arrivalDates, setArrivalDates] = useState<string[]>([""]);
+  const [populationChoice, setPopulationChoice] = useState("");
+  const [customPopulation, setCustomPopulation] = useState("");
   const [startsOn, setStartsOn] = useState("");
   const [endsOn, setEndsOn] = useState("");
   const [status, setStatus] = useState<CycleStatus>("draft");
@@ -94,7 +100,17 @@ export default function NewCyclePage() {
         const config = configRes.ok ? await configRes.json() as AdminConfig : { allocations: {} };
         if (!cancelled) {
           setName(cycle.name);
-          setRecruitmentYear(cycle.recruitment_year);
+          setLegacyRecruitmentYear(cycle.recruitment_year);
+          const storedArrivalDates = (config.cycleMeta?.arrivalDates || []).filter(Boolean);
+          setArrivalDates(storedArrivalDates.length ? storedArrivalDates : [""]);
+          const storedPopulation = config.cycleMeta?.populationType?.trim() || "";
+          if (storedPopulation && POPULATION_OPTIONS.includes(storedPopulation)) {
+            setPopulationChoice(storedPopulation);
+            setCustomPopulation("");
+          } else if (storedPopulation) {
+            setPopulationChoice(CUSTOM_POPULATION);
+            setCustomPopulation(storedPopulation);
+          }
           setStartsOn(cycle.starts_on || "");
           setEndsOn(cycle.ends_on || "");
           setStatus(cycle.status === "archived" ? "completed" : cycle.status);
@@ -122,6 +138,8 @@ export default function NewCyclePage() {
   const totalAllocations = useMemo(() => selectedUnitIds.reduce((sum, unitId) => sum + Math.max(0, Number(allocations[unitId] || 0)), 0), [selectedUnitIds, allocations]);
   const input = useMemo(() => ({ candidateNames: Array.from({ length: candidateCount }, (_, i) => `candidate-${i}`), units: selectedUnitIds, days, durationMinutes: duration }), [candidateCount, selectedUnitIds, days, duration]);
   const report = useMemo(() => capacityReport(input), [input]);
+  const populationType = populationChoice === CUSTOM_POPULATION ? customPopulation.trim() : populationChoice;
+  const cleanArrivalDates = useMemo(() => [...new Set(arrivalDates.filter(Boolean))].sort(), [arrivalDates]);
 
   function handleStartDate(value: string) {
     setStartsOn(value);
@@ -129,6 +147,9 @@ export default function NewCyclePage() {
     const nextDay = addDays(value, 1);
     setEndsOn((current) => !current || current <= value ? nextDay : current);
   }
+  function updateArrivalDate(index: number, value: string) { setArrivalDates((current) => current.map((date, i) => i === index ? value : date)); }
+  function addArrivalDate() { setArrivalDates((current) => [...current, ""]); }
+  function removeArrivalDate(index: number) { setArrivalDates((current) => current.length <= 1 ? current : current.filter((_, i) => i !== index)); }
   function toggleUnit(unitId: string) {
     const selected = selectedUnitIds.includes(unitId);
     setSelectedUnitIds((current) => selected ? current.filter((id) => id !== unitId) : [...current, unitId]);
@@ -165,7 +186,8 @@ export default function NewCyclePage() {
   async function saveCycle(destination: "summary" | "schedule", forceDraft = false) {
     setError("");
     if (!name.trim()) { setError("יש להזין שם למחזור."); return; }
-    if (!recruitmentYear) { setError("יש להזין שנת גיוס."); return; }
+    if (!cleanArrivalDates.length) { setError("יש להגדיר לפחות תאריך הגעה אחד ליחידה."); return; }
+    if (!populationType) { setError("יש לבחור או להזין סוג אוכלוסייה."); return; }
     if (startsOn && endsOn && endsOn <= startsOn) { setError("תאריך הסיום חייב להיות אחרי תאריך ההתחלה."); return; }
     if (destination === "schedule" && !candidateCount) { setError("כדי ליצור לוח ראיונות יש לייבא קודם מועמדים למחזור."); return; }
     if (destination === "schedule" && !selectedUnitIds.length) { setError("יש לבחור לפחות יחידה אחת למחזור."); return; }
@@ -176,6 +198,7 @@ export default function NewCyclePage() {
     const missingAccounts = selectedUnits.filter((u) => !accountByUnit.has(u.id));
     if (missingAccounts.length) { setError(`ליחידות ${missingAccounts.map((u) => u.name).join(", ")} אין חשבון יחידה פעיל.`); return; }
 
+    const recruitmentYear = Number(cleanArrivalDates[0]?.slice(0, 4) || startsOn.slice(0, 4) || legacyRecruitmentYear || new Date().getFullYear());
     setSaving(true);
     try {
       const payload = {
@@ -196,8 +219,12 @@ export default function NewCyclePage() {
       if (!cycleId) throw new Error("לא התקבל מזהה למחזור");
 
       const allocationPayload = Object.fromEntries(selectedUnitIds.map((unitId) => [unitId, Math.max(0, Math.floor(Number(allocations[unitId] || 0)))]));
-      const configResponse = await fetch("/api/admin/cycle-config", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ cycleId, allocations: allocationPayload }) });
-      if (!configResponse.ok) throw new Error("שמירת ההקצאות נכשלה");
+      const configResponse = await fetch("/api/admin/cycle-config", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ cycleId, allocations: allocationPayload, cycleMeta: { arrivalDates: cleanArrivalDates, populationType } }),
+      });
+      if (!configResponse.ok) throw new Error("שמירת פרטי המחזור נכשלה");
 
       if (!editId && candidateRows.length) {
         const importResponse = await fetch("/api/admin/candidates/import", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ cycleId, rows: candidateRows, fileName: "candidates.xlsx" }) });
@@ -228,11 +255,18 @@ export default function NewCyclePage() {
             <div className="row wrap"><span className="badge">{candidateCount} מועמדים</span><span className="badge">{selectedUnitIds.length} יחידות</span></div>
           </div>
           <div className="grid grid-4">
-            <div className="field" style={{ gridColumn: "span 2" }}><label>שם המחזור</label><input className="input" value={name} onChange={(e) => setName(e.target.value)} placeholder="לדוגמה: מחזור אוקטובר 2026" /></div>
-            <div className="field"><label>שנת גיוס</label><input className="input" type="number" value={recruitmentYear} onChange={(e) => setRecruitmentYear(Number(e.target.value))} /></div>
+            <div className="field" style={{ gridColumn: "span 2" }}><label>שם המחזור</label><input className="input" value={name} onChange={(e) => setName(e.target.value)} /></div>
+            <div className="field"><label>סוג אוכלוסייה</label><select className="select" value={populationChoice} onChange={(e) => setPopulationChoice(e.target.value)}><option value="">בחירה</option>{POPULATION_OPTIONS.map((option) => <option key={option} value={option}>{option}</option>)}<option value={CUSTOM_POPULATION}>אחר – הזנה ידנית</option></select></div>
             <div className="field"><label>סטטוס</label><select className="select" value={status} onChange={(e) => setStatus(e.target.value as CycleStatus)}><option value="draft">בתכנון</option><option value="active">פעיל</option><option value="completed">סגור</option></select></div>
-            <div className="field" style={{ gridColumn: "span 2" }}><label>תאריך התחלה</label><input className="input" type="date" value={startsOn} onChange={(e) => handleStartDate(e.target.value)} /></div>
-            <div className="field" style={{ gridColumn: "span 2" }}><label>תאריך סיום</label><input className="input" type="date" value={endsOn} min={startsOn ? addDays(startsOn, 1) : undefined} onChange={(e) => setEndsOn(e.target.value)} /></div>
+            {populationChoice === CUSTOM_POPULATION && <div className="field" style={{ gridColumn: "span 2" }}><label>סוג אוכלוסייה</label><input className="input" value={customPopulation} onChange={(e) => setCustomPopulation(e.target.value)} /></div>}
+            <div className="field" style={{ gridColumn: "1 / -1", marginBottom: 2 }}>
+              <div className="row between wrap"><label>תאריך הגעה ליחידה</label><button type="button" className="btn btn-small" onClick={addArrivalDate}>+ הוספת פעימת הגעה</button></div>
+              <div className="grid grid-3">
+                {arrivalDates.map((date, index) => <div className="row" key={`arrival-${index}`} style={{ alignItems: "stretch" }}><input className="input" type="date" value={date} onChange={(e) => updateArrivalDate(index, e.target.value)} />{arrivalDates.length > 1 && <button type="button" className="btn btn-small btn-danger" onClick={() => removeArrivalDate(index)}>הסרה</button>}</div>)}
+              </div>
+            </div>
+            <div className="field" style={{ gridColumn: "span 2" }}><label>תחילת תהליך הראיונות</label><input className="input" type="date" value={startsOn} onChange={(e) => handleStartDate(e.target.value)} /></div>
+            <div className="field" style={{ gridColumn: "span 2" }}><label>סיום תהליך הראיונות</label><input className="input" type="date" value={endsOn} min={startsOn ? addDays(startsOn, 1) : undefined} onChange={(e) => setEndsOn(e.target.value)} /></div>
           </div>
         </section>
 
