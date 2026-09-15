@@ -57,6 +57,7 @@ export default function LoginPage() {
             width={1619}
             height={971}
             priority
+            unoptimized
             style={{ ...logoCropStyle, width: 430, height: 215, margin: "0 auto 24px" }}
           />
           <h1 style={{ textAlign: "center", maxWidth: 720 }}>מערכת ניהול מחזורי ראיונות ומיון מועמדים</h1>
@@ -70,6 +71,7 @@ export default function LoginPage() {
             width={1619}
             height={971}
             priority
+            unoptimized
             style={{ ...logoCropStyle, width: 300, height: 150, margin: "0 auto 24px", maxWidth: "100%" }}
           />
           <div className="field"><label>שם משתמש</label><input className="input" name="username" placeholder="הזן/י שם משתמש" autoComplete="username" required /></div>
