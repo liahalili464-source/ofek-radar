@@ -186,12 +186,24 @@ export async function POST(request: Request) {
       }
     }
 
+    const { data: existingResponse, error: existingResponseError } = await supabase.from("questionnaire_responses")
+      .select("answers")
+      .eq("questionnaire_id", questionnaire.id)
+      .eq("candidate_id", candidate.id)
+      .eq("cycle_id", cycle.id)
+      .maybeSingle();
+    if (existingResponseError) throw existingResponseError;
+    const existingAnswers = existingResponse?.answers && typeof existingResponse.answers === "object" && !Array.isArray(existingResponse.answers)
+      ? existingResponse.answers as Record<string, unknown>
+      : {};
+    const reservedAnswers = Object.fromEntries(Object.entries(existingAnswers).filter(([key]) => key.startsWith("__")));
+
     const { error: saveError } = await supabase.from("questionnaire_responses").upsert({
       questionnaire_id: questionnaire.id,
       candidate_id: candidate.id,
       cycle_id: cycle.id,
       version: questionnaire.active_version,
-      answers,
+      answers: { ...reservedAnswers, ...answers },
       submitted_at: new Date().toISOString(),
     }, { onConflict: "questionnaire_id,candidate_id,cycle_id" });
     if (saveError) throw saveError;
