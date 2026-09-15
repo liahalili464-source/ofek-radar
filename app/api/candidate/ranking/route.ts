@@ -42,7 +42,7 @@ export async function POST(request: Request) {
 
     const { data: existingResponse, error: responseError } = await supabase
       .from("questionnaire_responses")
-      .select("answers")
+      .select("answers,submitted_at")
       .eq("questionnaire_id", questionnaire.id)
       .eq("candidate_id", candidate.id)
       .eq("cycle_id", cycle.id)
@@ -99,7 +99,7 @@ export async function POST(request: Request) {
       cycle_id: cycle.id,
       version: questionnaire.active_version,
       answers: nextAnswers,
-      submitted_at: existingResponse ? undefined : new Date().toISOString(),
+      submitted_at: existingResponse?.submitted_at || new Date().toISOString(),
     }, { onConflict: "questionnaire_id,candidate_id,cycle_id" });
     if (saveError) throw saveError;
 
