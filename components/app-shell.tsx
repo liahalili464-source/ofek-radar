@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import {
+  BarChart3,
   CalendarDays,
   ClipboardList,
   FileQuestion,
@@ -20,6 +21,7 @@ const adminNav = [
   { href: "/candidates", label: "מועמדים", icon: Users },
   { href: "/schedule", label: "שיבוץ ראיונות", icon: CalendarDays },
   { href: "/questionnaire", label: "שאלון", icon: FileQuestion },
+  { href: "/feedback", label: "סקר שביעות רצון", icon: BarChart3 },
   { href: "/users", label: "יחידות והרשאות", icon: UserRoundSearch },
 ];
 
@@ -106,6 +108,7 @@ export function AppShell({
             width={1619}
             height={971}
             priority
+            unoptimized
             style={{ width: 178, height: 90, objectFit: "cover", objectPosition: "50% 42%", display: "block", margin: "0 auto 24px" }}
           />
         </Link>
