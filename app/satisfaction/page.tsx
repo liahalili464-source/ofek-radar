@@ -3,6 +3,8 @@
 import Image from "next/image";
 import { FormEvent, useState } from "react";
 
+const MASTER_PREVIEW_CODE = "1905";
+
 const ratingQuestions = [
   ["intake_experience", "איך היית מדרג את חווית הקליטה הכללית שלך ביחידה?"],
   ["info_clarity", "עד כמה הרגשת שהמידע שקיבלת היה ברור ומפורט?"],
@@ -21,7 +23,7 @@ const openQuestions = [
 ] as const;
 
 type Answers = Record<string, string | number>;
-type SurveyData = { cycleName: string; prefill: Answers; previouslySubmitted: boolean };
+type SurveyData = { cycleName: string; prefill: Answers; previouslySubmitted: boolean; previewOnly?: boolean };
 
 function normalizePhone(value: string) {
   let digits = value.replace(/\D/g, "");
@@ -45,7 +47,7 @@ export default function SatisfactionPage() {
     setError("");
     setSaved(false);
     const normalized = normalizePhone(phone);
-    if (normalized.length < 9) { setError("יש להזין מספר טלפון תקין."); return; }
+    if (normalized !== MASTER_PREVIEW_CODE && normalized.length < 9) { setError("יש להזין מספר טלפון תקין."); return; }
     setLoading(true);
     try {
       const response = await fetch("/api/satisfaction/public", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "load", phone: normalized }) });
@@ -94,6 +96,7 @@ export default function SatisfactionPage() {
           </form>}
 
           {data && <div style={{ marginTop: 20 }}>
+            {data.previewOnly && <div className="notice" style={{ marginBottom: 16 }}><b>תצוגת IT</b><div className="stat-label">מצב תצוגה בלבד — המשוב לא ישויך למועמד ולא ייכנס לנתוני המחזורים.</div></div>}
             <div className="notice" style={{ marginBottom: 18 }}><div className="stat-label">הסקר ישויך למחזור</div><b>{data.cycleName}</b></div>
 
             <h2 className="section-title">שאלות דירוג</h2>
@@ -112,8 +115,8 @@ export default function SatisfactionPage() {
             </div>
 
             {error && <div className="notice danger" style={{ marginTop: 14 }}>{error}</div>}
-            {saved && <div className="notice success" style={{ marginTop: 14 }}>✓ תודה, המשוב נשמר בהצלחה.</div>}
-            <button className="btn btn-primary" style={{ width: "100%", marginTop: 16 }} disabled={saving} onClick={submit}>{saving ? "שומר..." : data.previouslySubmitted ? "עדכון המשוב" : "שליחת המשוב"}</button>
+            {saved && <div className="notice success" style={{ marginTop: 14 }}>✓ {data.previewOnly ? "התצוגה הושלמה — לא נשמרו נתונים." : "תודה, המשוב נשמר בהצלחה."}</div>}
+            <button className="btn btn-primary" style={{ width: "100%", marginTop: 16 }} disabled={saving} onClick={submit}>{saving ? "שומר..." : data.previewOnly ? "בדיקת שליחה" : data.previouslySubmitted ? "עדכון המשוב" : "שליחת המשוב"}</button>
             <button className="btn btn-small" style={{ marginTop: 12 }} onClick={() => { setData(null); setSaved(false); setError(""); }}>שימוש במספר אחר</button>
           </div>}
         </section>
