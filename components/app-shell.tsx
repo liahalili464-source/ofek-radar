@@ -6,6 +6,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import {
   BarChart3,
+  Boxes,
   CalendarDays,
   ClipboardList,
   FileQuestion,
@@ -21,6 +22,7 @@ const adminNav = [
   { href: "/cycles", label: "מחזורי ראיונות", icon: LayoutDashboard },
   { href: "/candidates", label: "מועמדים", icon: Users },
   { href: "/schedule", label: "שיבוץ ראיונות", icon: CalendarDays },
+  { href: "/placement", label: "שיבוץ ליחידות", icon: Boxes },
   { href: "/questionnaire", label: "שאלון", icon: FileQuestion },
   { href: "/feedback", label: "סקר שביעות רצון", icon: BarChart3 },
   { href: "/users", label: "יחידות והרשאות", icon: UserRoundSearch },
