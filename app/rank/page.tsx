@@ -3,6 +3,8 @@
 import Image from "next/image";
 import { FormEvent, useMemo, useState } from "react";
 
+const MASTER_PREVIEW_CODE = "1905";
+
 type Unit = { id: string; name: string };
 type Ranking = { unitId: string; rank: number };
 type RankingData = {
@@ -13,6 +15,7 @@ type RankingData = {
   units: Unit[];
   rankings: Ranking[];
   previouslySubmitted: boolean;
+  previewOnly?: boolean;
 };
 
 function normalizePhone(value: string) {
@@ -40,7 +43,7 @@ export default function RankPage() {
     setError("");
     setSaved(false);
     const normalized = normalizePhone(phone);
-    if (normalized.length < 9) { setError("יש להזין מספר טלפון תקין."); return; }
+    if (normalized !== MASTER_PREVIEW_CODE && normalized.length < 9) { setError("יש להזין מספר טלפון תקין."); return; }
     setLoading(true);
     try {
       const response = await fetch("/api/candidate/ranking", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "load", phone: normalized }) });
@@ -93,6 +96,7 @@ export default function RankPage() {
           </form>}
 
           {data && <>
+            {data.previewOnly && <div className="notice" style={{ marginBottom: 16 }}><b>תצוגת IT</b><div className="stat-label">מצב תצוגה בלבד — שום דירוג לא ישויך למועמד או למחזור.</div></div>}
             <div className="notice" style={{ marginBottom: 16 }}><b>{data.candidateName}</b><div className="stat-label">{data.cycleName}</div></div>
             {!data.ready ? <div className="notice warning">הדירוג עדיין לא פתוח. {data.pendingInterviews > 0 ? `נותרו ${data.pendingInterviews} ראיונות שטרם הושלמו.` : "יש להשלים את תהליך הראיונות לפני הדירוג."}</div> : <>
               <div style={{ display: "grid", gap: 10 }}>
@@ -105,8 +109,8 @@ export default function RankPage() {
                 </div>)}
               </div>
               {error && <div className="notice danger" style={{ marginTop: 14 }}>{error}</div>}
-              {saved && <div className="notice success" style={{ marginTop: 14 }}>✓ הדירוג נשמר בהצלחה.</div>}
-              <button className="btn btn-primary" style={{ width: "100%", marginTop: 16 }} disabled={!complete || saving} onClick={submit}>{saving ? "שומר..." : data.previouslySubmitted ? "עדכון הדירוג" : "שמירת הדירוג"}</button>
+              {saved && <div className="notice success" style={{ marginTop: 14 }}>✓ {data.previewOnly ? "התצוגה הושלמה — לא נשמרו נתונים." : "הדירוג נשמר בהצלחה."}</div>}
+              <button className="btn btn-primary" style={{ width: "100%", marginTop: 16 }} disabled={!complete || saving} onClick={submit}>{saving ? "שומר..." : data.previewOnly ? "בדיקת שליחה" : data.previouslySubmitted ? "עדכון הדירוג" : "שמירת הדירוג"}</button>
             </>}
             <button className="btn btn-small" style={{ marginTop: 14 }} onClick={() => { setData(null); setSaved(false); setError(""); }}>שימוש במספר אחר</button>
           </>}
