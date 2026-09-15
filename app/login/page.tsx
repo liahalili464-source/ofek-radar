@@ -15,7 +15,7 @@ export default function LoginPage() {
     setLoading(true);
     setError("");
     const fd = new FormData(e.currentTarget);
-    const username = String(fd.get("username") || "").trim();
+    const username = String(fd.get("username") || "").trim().toLowerCase();
     const password = String(fd.get("password") || "");
 
     try {
