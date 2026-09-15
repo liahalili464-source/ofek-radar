@@ -9,14 +9,25 @@ type PriorityConfig = {
   note?: string;
 };
 
+type CycleMeta = {
+  arrivalDates: string[];
+  populationType: string;
+};
+
 type AdminConfig = {
   version: 1;
   allocations: Record<string, number>;
   priorities: Record<string, PriorityConfig>;
+  cycleMeta: CycleMeta;
 };
 
 function emptyConfig(): AdminConfig {
-  return { version: 1, allocations: {}, priorities: {} };
+  return { version: 1, allocations: {}, priorities: {}, cycleMeta: { arrivalDates: [], populationType: "" } };
+}
+
+function normalizeDate(value: unknown) {
+  const date = typeof value === "string" ? value.trim() : "";
+  return /^\d{4}-\d{2}-\d{2}$/.test(date) ? date : "";
 }
 
 function normalizeConfig(value: unknown): AdminConfig {
@@ -44,7 +55,15 @@ function normalizeConfig(value: unknown): AdminConfig {
     }
   }
 
-  return { version: 1, allocations, priorities };
+  const rawMeta = raw.cycleMeta && typeof raw.cycleMeta === "object" && !Array.isArray(raw.cycleMeta)
+    ? raw.cycleMeta as Record<string, unknown>
+    : {};
+  const arrivalDates = Array.isArray(rawMeta.arrivalDates)
+    ? [...new Set(rawMeta.arrivalDates.map(normalizeDate).filter(Boolean))].sort()
+    : [];
+  const populationType = typeof rawMeta.populationType === "string" ? rawMeta.populationType.trim().slice(0, 120) : "";
+
+  return { version: 1, allocations, priorities, cycleMeta: { arrivalDates, populationType } };
 }
 
 async function loadConfig(supabase: Awaited<ReturnType<typeof requireAdmin>>["supabase"], cycleId: string) {
@@ -82,7 +101,12 @@ export async function PUT(request: Request) {
     if (!cycleId) return NextResponse.json({ error: "CYCLE_REQUIRED" }, { status: 400 });
 
     const { rowId, config: current } = await loadConfig(supabase, cycleId);
-    const next: AdminConfig = { ...current, allocations: { ...current.allocations }, priorities: { ...current.priorities } };
+    const next: AdminConfig = {
+      ...current,
+      allocations: { ...current.allocations },
+      priorities: { ...current.priorities },
+      cycleMeta: { ...current.cycleMeta, arrivalDates: [...current.cycleMeta.arrivalDates] },
+    };
 
     if (body.allocations && typeof body.allocations === "object" && !Array.isArray(body.allocations)) {
       next.allocations = {};
@@ -90,6 +114,17 @@ export async function PUT(request: Request) {
         const number = Number(amount);
         if (Number.isFinite(number) && number >= 0) next.allocations[unitId] = Math.floor(number);
       }
+    }
+
+    if (body.cycleMeta && typeof body.cycleMeta === "object" && !Array.isArray(body.cycleMeta)) {
+      const meta = body.cycleMeta as Record<string, unknown>;
+      const arrivalDates = Array.isArray(meta.arrivalDates)
+        ? [...new Set(meta.arrivalDates.map(normalizeDate).filter(Boolean))].sort()
+        : next.cycleMeta.arrivalDates;
+      const populationType = typeof meta.populationType === "string"
+        ? meta.populationType.trim().slice(0, 120)
+        : next.cycleMeta.populationType;
+      next.cycleMeta = { arrivalDates, populationType };
     }
 
     if (body.priority && typeof body.priority === "object" && !Array.isArray(body.priority)) {
