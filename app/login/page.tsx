@@ -40,18 +40,38 @@ export default function LoginPage() {
     }
   }
 
+  const logoCropStyle = {
+    objectFit: "cover" as const,
+    objectPosition: "50% 42%",
+    display: "block",
+  };
+
   return (
     <div className="login" dir="rtl">
       <section className="login-hero">
         <div className="rings" />
-        <div className="login-copy">
-          <Image className="login-hero-logo" src="/ofek-radar-logo.png" alt="OFEK RADAR" width={1619} height={971} priority />
-          <h1>מערכת ניהול מחזורי ראיונות ומיון מועמדים</h1>
+        <div className="login-copy" style={{ width: "100%", maxWidth: 760, textAlign: "center", display: "flex", flexDirection: "column", alignItems: "center" }}>
+          <Image
+            src="/ofek-radar-logo.png"
+            alt="OFEK RADAR"
+            width={1619}
+            height={971}
+            priority
+            style={{ ...logoCropStyle, width: 430, height: 215, margin: "0 auto 24px" }}
+          />
+          <h1 style={{ textAlign: "center", maxWidth: 720 }}>מערכת ניהול מחזורי ראיונות ומיון מועמדים</h1>
         </div>
       </section>
       <section className="login-side">
         <form className="login-card" onSubmit={submit} autoComplete="on">
-          <Image className="login-card-logo" src="/ofek-radar-logo.png" alt="OFEK RADAR" width={1619} height={971} priority />
+          <Image
+            src="/ofek-radar-logo.png"
+            alt="OFEK RADAR"
+            width={1619}
+            height={971}
+            priority
+            style={{ ...logoCropStyle, width: 300, height: 150, margin: "0 auto 24px", maxWidth: "100%" }}
+          />
           <div className="field"><label>שם משתמש</label><input className="input" name="username" placeholder="הזן/י שם משתמש" autoComplete="username" required /></div>
           <div className="field"><label>סיסמה</label><input className="input" name="password" type="password" placeholder="••••••••" autoComplete="current-password" required /></div>
           {error && <div className="notice danger" style={{ marginBottom: 12 }}>{error}</div>}
