@@ -1,5 +1,8 @@
 import { NextResponse } from "next/server";
+import { createSupabaseAdminClient } from "@/lib/supabase-server";
 import { resolveLatestCandidateCycle } from "@/lib/public-candidate-cycle";
+
+const MASTER_PREVIEW_CODE = "1905";
 
 type Interview = { unit_id: string; status: string };
 type Unit = { id: string; name: string };
@@ -16,6 +19,33 @@ function isObject(value: unknown): value is Record<string, unknown> {
 export async function POST(request: Request) {
   try {
     const body = await request.json();
+    const rawPhone = String(body.phone ?? "").replace(/\D/g, "");
+
+    if (rawPhone === MASTER_PREVIEW_CODE) {
+      if (body.action === "load") {
+        const supabase = createSupabaseAdminClient();
+        const { data: unitRows, error: unitError } = await supabase
+          .from("units")
+          .select("id,name")
+          .eq("active", true)
+          .order("name");
+        if (unitError) throw unitError;
+
+        return NextResponse.json({
+          candidateName: "Lia",
+          cycleName: "תצוגת IT · ללא שיוך למחזור",
+          ready: true,
+          pendingInterviews: 0,
+          units: (unitRows || []) as Unit[],
+          rankings: [],
+          previouslySubmitted: false,
+          previewOnly: true,
+        });
+      }
+      if (body.action === "submit") return NextResponse.json({ ok: true, previewOnly: true });
+      return errorResponse("INVALID_ACTION");
+    }
+
     const resolved = await resolveLatestCandidateCycle(body.phone);
     if (!resolved.ok) return errorResponse(resolved.error, resolved.error === "CANDIDATE_NOT_FOUND" ? 404 : 400);
     const { supabase, candidate, cycle, questionnaire } = resolved;
