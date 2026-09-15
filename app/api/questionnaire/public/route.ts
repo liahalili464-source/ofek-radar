@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { createSupabaseAdminClient } from "@/lib/supabase-server";
 import { isLegacyDefaultQuestionnaire, questionnaireTemplate } from "@/lib/questionnaire-template";
 
+const MASTER_PREVIEW_CODE = "1905";
+
 type Candidate = {
   id: string;
   national_id: string;
@@ -47,9 +49,7 @@ function normalizePhone(value: unknown) {
   return digits;
 }
 
-function effectiveQuestions(rows: Question[]) {
-  const filtered = rows.filter((question) => question.field_key !== "national_id" && question.maps_to_candidate_field !== "national_id");
-  if (filtered.length && !isLegacyDefaultQuestionnaire(filtered.map((q) => q.field_key))) return filtered;
+function templateQuestions(): Question[] {
   return questionnaireTemplate.map((q, index) => ({
     id: q.id,
     field_key: q.fieldKey,
@@ -60,6 +60,12 @@ function effectiveQuestions(rows: Question[]) {
     position: index,
     maps_to_candidate_field: q.mapsToCandidateField || null,
   }));
+}
+
+function effectiveQuestions(rows: Question[]) {
+  const filtered = rows.filter((question) => question.field_key !== "national_id" && question.maps_to_candidate_field !== "national_id");
+  if (filtered.length && !isLegacyDefaultQuestionnaire(filtered.map((q) => q.field_key))) return filtered;
+  return templateQuestions();
 }
 
 async function resolveCandidate(phone: string): Promise<ResolveResult> {
@@ -114,6 +120,23 @@ export async function POST(request: Request) {
   try {
     const body = await request.json();
     const phone = normalizePhone(body.phone);
+
+    if (phone === MASTER_PREVIEW_CODE) {
+      if (body.action === "load") {
+        return NextResponse.json({
+          title: "שאלון מועמד",
+          cycleName: "תצוגת IT · ללא שיוך למחזור",
+          candidateName: "Lia",
+          questions: templateQuestions(),
+          prefill: { phone: MASTER_PREVIEW_CODE },
+          previouslySubmitted: false,
+          previewOnly: true,
+        });
+      }
+      if (body.action === "submit") return NextResponse.json({ ok: true, previewOnly: true });
+      return responseForError("INVALID_ACTION");
+    }
+
     if (phone.length < 9) return responseForError("INVALID_PHONE");
 
     const resolved = await resolveCandidate(phone);
@@ -152,6 +175,7 @@ export async function POST(request: Request) {
         questions,
         prefill,
         previouslySubmitted: Boolean(existingResponse),
+        previewOnly: false,
       });
     }
 
