@@ -9,8 +9,13 @@ const assistant = Assistant({
 });
 
 export const metadata: Metadata = {
-  title: "OFEK RADAR",
-  description: "מערכת ניהול מחזורי ראיונות ומיון מועמדים"
+  title: "Ofek Radar",
+  description: "מערכת ניהול מחזורי ראיונות ומיון מועמדים",
+  icons: {
+    icon: [{ url: "/ofek-radar-icon.svg", type: "image/svg+xml" }],
+    shortcut: "/ofek-radar-icon.svg",
+    apple: "/ofek-radar-icon.svg",
+  },
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
