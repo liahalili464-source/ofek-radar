@@ -45,13 +45,13 @@ export default function LoginPage() {
       <section className="login-hero">
         <div className="rings" />
         <div className="login-copy">
-          <Image src="/ofek-radar-logo.png" alt="OFEK RADAR" width={632} height={223} priority />
+          <Image className="login-hero-logo" src="/ofek-radar-logo.png" alt="OFEK RADAR" width={1619} height={971} priority />
           <h1>מערכת ניהול מחזורי ראיונות ומיון מועמדים</h1>
         </div>
       </section>
       <section className="login-side">
         <form className="login-card" onSubmit={submit} autoComplete="on">
-          <Image src="/ofek-radar-logo.png" alt="OFEK RADAR" width={260} height={92} style={{ width: 260, height: "auto", display: "block", margin: "0 auto 24px" }} />
+          <Image className="login-card-logo" src="/ofek-radar-logo.png" alt="OFEK RADAR" width={1619} height={971} priority />
           <div className="field"><label>שם משתמש</label><input className="input" name="username" placeholder="הזן/י שם משתמש" autoComplete="username" required /></div>
           <div className="field"><label>סיסמה</label><input className="input" name="password" type="password" placeholder="••••••••" autoComplete="current-password" required /></div>
           {error && <div className="notice danger" style={{ marginBottom: 12 }}>{error}</div>}
