@@ -13,6 +13,7 @@ import {
   LogOut,
   Users,
   UserRoundSearch,
+  Wrench,
 } from "lucide-react";
 import { createSupabaseBrowserClient } from "@/lib/supabase-client";
 
@@ -83,12 +84,21 @@ export function AppShell({
     return () => { cancelled = true; };
   }, []);
 
-  const nav = viewer?.role === "interviewer" ? interviewerNav : adminNav;
+  const isMaintenance = viewer?.role === "admin" && viewer.username?.trim().toLowerCase() === "lia";
+  const nav = viewer?.role === "interviewer"
+    ? interviewerNav
+    : isMaintenance
+      ? [...adminNav, { href: "/maintenance", label: "תחזוקת מערכת", icon: Wrench }]
+      : adminNav;
   const homeHref = viewer?.role === "interviewer" ? "/interviewer" : "/cycles";
   const displayName = viewer?.role === "interviewer"
     ? (viewer.unitName || viewer.fullName || viewer.username)
     : (viewer?.fullName || "מדור איתור ומיון");
-  const displaySub = viewer?.role === "interviewer" ? "חשבון יחידה" : "מדור איתור ומיון";
+  const displaySub = viewer?.role === "interviewer"
+    ? "חשבון יחידה"
+    : isMaintenance
+      ? "צוות תחזוקה · גישת IT"
+      : "מדור איתור ומיון";
   const initials = useMemo(() => displayName.split(/\s+/).filter(Boolean).slice(0, 2).map((x) => x[0]).join(""), [displayName]);
 
   async function logout() {
