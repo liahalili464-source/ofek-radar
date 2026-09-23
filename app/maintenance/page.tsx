@@ -34,7 +34,7 @@ export default async function MaintenancePage() {
         <Link className="notice" href="/cycles"><b>מחזורי ראיונות</b><div className="stat-label">יצירה, עריכה וסיכום מחזורים</div></Link>
         <Link className="notice" href="/candidates"><b>מועמדים</b><div className="stat-label">צפייה ועריכת פרטי מועמדים</div></Link>
         <Link className="notice" href="/schedule"><b>שיבוץ ראיונות</b><div className="stat-label">ניהול לוחות הראיונות</div></Link>
-        <Link className="notice" href="/placements"><b>שיבוץ ליחידות</b><div className="stat-label">העדפות, חוות דעת ושיבוץ סופי</div></Link>
+        <Link className="notice" href="/placement"><b>שיבוץ ליחידות</b><div className="stat-label">העדפות, חוות דעת ושיבוץ סופי</div></Link>
         <Link className="notice" href="/questionnaire"><b>שאלון</b><div className="stat-label">ניהול שאלון המועמדים</div></Link>
         <Link className="notice" href="/feedback"><b>נתוני שביעות רצון</b><div className="stat-label">סיכום וניתוח משובי מועמדים</div></Link>
         <Link className="notice" href="/users"><b>יחידות והרשאות</b><div className="stat-label">ניהול המשתמשים הרגילים במערכת</div></Link>
