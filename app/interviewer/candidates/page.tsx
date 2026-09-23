@@ -84,10 +84,14 @@ export default function InterviewerCandidatesPage() {
         return;
       }
 
+      const queryParams = new URLSearchParams(window.location.search);
+      const previewInterviewer = queryParams.get("previewInterviewer");
+      const interviewOwnerId = previewInterviewer || user.id;
+
       const { data: interviewData, error: interviewError } = await supabase
         .from("interviews")
         .select("id,candidate_id,cycle_id,starts_at,ends_at,status,location,candidates(id,full_name,phone,city),cycles(id,name,status)")
-        .eq("interviewer_id", user.id)
+        .eq("interviewer_id", interviewOwnerId)
         .order("starts_at", { ascending: true });
       if (interviewError) {
         if (!cancelled) { setError(interviewError.message); setLoading(false); }
@@ -202,7 +206,7 @@ export default function InterviewerCandidatesPage() {
                 <td><span className={`badge ${row.questionnaireDone ? "ok" : "warn"}`}>{row.questionnaireDone ? "הושלם" : "חסר"}</span></td>
                 <td><span className={`badge ${row.evaluationDone ? "ok" : "warn"}`}>{row.evaluationDone ? "נשמרה" : "פתוחה"}</span></td>
                 <td><StatusBadge status={statusLabel(row.status)} /></td>
-                <td><Link className="btn btn-small btn-primary" href={`/interviewer/candidates/${row.candidateId}?interview=${row.interviewId}`}>פתיחת כרטיס</Link></td>
+                <td><Link className="btn btn-small btn-primary" href={`/interviewer/candidates/${row.candidateId}?interview=${row.interviewId}${new URLSearchParams(window.location.search).get("previewInterviewer") ? `&previewInterviewer=${new URLSearchParams(window.location.search).get("previewInterviewer")}&previewUnit=${new URLSearchParams(window.location.search).get("previewUnit") || ""}` : ""}`}>פתיחת כרטיס</Link></td>
               </tr>)}
               {!loading && !filtered.length && <tr><td colSpan={7}><div className="empty">לא נמצאו מועמדים להצגה.</div></td></tr>}
             </tbody>
