@@ -48,7 +48,13 @@ export default function InterviewerPage() {
       const { data: { user }, error: userError } = await supabase.auth.getUser();
       if (userError || !user) { if (!cancelled) { setError("לא נמצא משתמש מחובר"); setLoading(false); } return; }
 
-      const { data: profile, error: profileError } = await supabase.from("profiles").select("unit_id,full_name,username").eq("id", user.id).single();
+      const queryParams = new URLSearchParams(window.location.search);
+      const previewInterviewer = queryParams.get("previewInterviewer");
+      const previewUnit = queryParams.get("previewUnit");
+      const interviewOwnerId = previewInterviewer || user.id;
+      const { data: profile, error: profileError } = previewInterviewer
+        ? await supabase.from("profiles").select("unit_id,full_name,username").eq("id", previewInterviewer).single()
+        : await supabase.from("profiles").select("unit_id,full_name,username").eq("id", user.id).single();
       if (profileError || !profile) { if (!cancelled) { setError(profileError?.message || "לא נמצא פרופיל"); setLoading(false); } return; }
       if (profile.unit_id) {
         const { data: unit } = await supabase.from("units").select("name").eq("id", profile.unit_id).single();
@@ -57,7 +63,7 @@ export default function InterviewerPage() {
 
       const { data: interviewData, error: interviewError } = await supabase.from("interviews")
         .select("id,candidate_id,cycle_id,starts_at,ends_at,status,location,candidates(full_name),cycles(name,status)")
-        .eq("interviewer_id", user.id).order("starts_at", { ascending: true });
+        .eq("interviewer_id", interviewOwnerId).order("starts_at", { ascending: true });
       if (interviewError) { if (!cancelled) { setError(interviewError.message); setLoading(false); } return; }
 
       const interviewRows = (interviewData || []) as unknown as InterviewJoin[];
