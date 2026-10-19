@@ -121,7 +121,7 @@ export default function RankPage() {
         <Image src="/ofek-radar-logo.png" alt="Ofek Radar" width={1619} height={971} unoptimized style={{ width: 205, height: 102, objectFit: "cover", objectPosition: "50% 42%", display: "block", margin: "0 auto 14px" }} />
 
         {!data && <section style={{ ...panel, width: "min(620px,100%)", margin: "0 auto", padding: 28 }}>
-          <div style={{ textAlign: "center", marginBottom: 24 }}><h1 style={{ margin: "0 0 8px", fontSize: 31 }}>דירוג יחידות</h1><div className="stat-label">לאחר סיום כל הראיונות תוכלו לדרג את היחידות לפי סדר ההעדפה שלכם.</div></div>
+          <div style={{ textAlign: "center", marginBottom: 24 }}><h1 style={{ margin: "0 0 8px", fontSize: 31 }}>דירוג יחידות</h1><div className="stat-label">לאחר סיום הראיונות יש לדרג את כל היחידות שראיינו אתכם, מהמועדפת ביותר ועד לפחות מועדפת.</div></div>
           <form onSubmit={identify}>
             <div className="field"><label>מספר טלפון</label><input className="input" inputMode="tel" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="05XXXXXXXX" required /></div>
             {error && <div className="notice danger" style={{ marginBottom: 12 }}>{error}</div>}
@@ -149,7 +149,7 @@ export default function RankPage() {
           </section>
 
           {!data.ready ? <section style={{ ...panel, padding: 28 }}><div className="notice warning">הדירוג עדיין לא פתוח. {data.pendingInterviews > 0 ? `נותרו ${data.pendingInterviews} ראיונות שטרם הושלמו.` : "יש להשלים את תהליך הראיונות לפני הדירוג."}</div></section> : step === 1 ? <section style={{ ...panel, padding: "24px clamp(14px,3vw,28px)" }}>
-            <div style={{ marginBottom: 18 }}><h2 style={{ margin: "0 0 5px", fontSize: 23 }}>דרגו את {data.units.length} היחידות לפי סדר ההעדפה שלכם</h2><div className="stat-label">היחידה במקום 1 היא העדיפות הגבוהה ביותר. גררו את השורות או השתמשו בחצים.</div></div>
+            <div style={{ marginBottom: 18 }}><h2 style={{ margin: "0 0 5px", fontSize: 23 }}>דרגו את {data.units.length} היחידות לפי סדר ההעדפה שלכם</h2><div className="stat-label">יש לדרג את כל היחידות שראיינו אתכם. 1 = הכי רוצה. המספר האחרון = הכי פחות רוצה. גררו את השורות או השתמשו בחצים.</div></div>
             <div style={{ display: "grid", gap: 9 }}>
               {orderedUnits.map((unit, index) => <div key={unit.id} draggable onDragStart={() => setDraggedId(unit.id)} onDragOver={(e) => e.preventDefault()} onDrop={() => dropOn(unit.id)} style={{ display: "grid", gridTemplateColumns: "42px 58px minmax(0,1fr) auto", gap: 11, alignItems: "center", padding: "11px 13px", borderRadius: 15, border: draggedId === unit.id ? "1px solid #5ee4f7" : "1px solid rgba(129,187,218,.18)", background: index < 3 ? "rgba(255,255,255,.075)" : "rgba(5,27,45,.36)", cursor: "grab" }}>
                 <GripVertical size={19} color="#7fa3b8" />
@@ -160,7 +160,7 @@ export default function RankPage() {
             </div>
             <div className="row between wrap" style={{ marginTop: 22 }}><button className="btn btn-small" onClick={() => { setData(null); setSaved(false); setError(""); }}>שימוש במספר אחר</button><button className="btn btn-primary" style={{ minWidth: 230 }} onClick={() => setStep(2)}>המשך לבדיקת הסדר <ChevronLeft size={17} /></button></div>
           </section> : step === 2 ? <section style={{ ...panel, padding: "28px clamp(18px,4vw,38px)" }}>
-            <div style={{ textAlign: "center", marginBottom: 22 }}><ShieldCheck size={38} color="#55daf2" style={{ marginBottom: 8 }} /><h2 style={{ margin: "0 0 6px", fontSize: 27 }}>זה סדר ההעדפות שלך</h2><div className="stat-label">כדאי לעבור עליו פעם נוספת לפני השליחה הסופית.</div></div>
+            <div style={{ textAlign: "center", marginBottom: 22 }}><ShieldCheck size={38} color="#55daf2" style={{ marginBottom: 8 }} /><h2 style={{ margin: "0 0 6px", fontSize: 27 }}>זה הדירוג המלא שלך</h2><div className="stat-label">ודאו שכל היחידות שראיינו אתכם מופיעות בסדר הנכון, מ־1 (הכי רוצה) ועד האחרונה (הכי פחות רוצה).</div></div>
             <div style={{ width: "min(680px,100%)", margin: "0 auto", display: "grid", gap: 8 }}>
               {orderedUnits.map((unit, index) => <div key={unit.id} style={{ display: "grid", gridTemplateColumns: "48px 1fr", gap: 12, alignItems: "center", padding: "12px 15px", borderRadius: 14, background: "rgba(5,27,45,.42)", border: "1px solid rgba(129,187,218,.16)" }}><div style={{ width: 42, height: 42, borderRadius: 99, display: "grid", placeItems: "center", fontWeight: 900, color: index < 3 ? "#062033" : "white", background: index === 0 ? "#ffe49a" : index === 1 ? "#9ce8fa" : index === 2 ? "#ffd0bb" : "#294c65" }}>{index + 1}</div><b style={{ fontSize: 18 }}>{unit.name}</b></div>)}
             </div>
@@ -170,7 +170,7 @@ export default function RankPage() {
             <div style={{ width: 66, height: 66, borderRadius: 99, background: "rgba(74,222,128,.14)", border: "1px solid rgba(74,222,128,.35)", display: "grid", placeItems: "center", margin: "0 auto 18px" }}><Check size={32} color="#70e59a" /></div>
             <h2 style={{ margin: "0 0 8px", fontSize: 29 }}>{data.previewOnly ? "תצוגת השליחה הושלמה" : "הדירוג נשלח בהצלחה"}</h2>
             <div className="stat-label" style={{ maxWidth: 520, margin: "0 auto 22px" }}>{data.previewOnly ? "זהו מסך התוצאה שהמועמד יראה. במצב IT לא נשמרו נתונים." : "תודה. סדר ההעדפות שלך נשמר ויועבר כחלק מתהליך השיבוץ."}</div>
-            <div style={{ width: "min(520px,100%)", margin: "0 auto", display: "grid", gap: 7, textAlign: "right" }}>{orderedUnits.slice(0, 3).map((unit, index) => <div className="notice" key={unit.id}><b>{index + 1}. {unit.name}</b></div>)}</div>
+            <div style={{ width: "min(520px,100%)", margin: "0 auto", display: "grid", gap: 7, textAlign: "right" }}>{orderedUnits.map((unit, index) => <div className="notice" key={unit.id}><b>{index + 1}. {unit.name}</b></div>)}</div>
             {data.previouslySubmitted && !data.previewOnly && <button className="btn" style={{ marginTop: 20 }} onClick={() => { setStep(1); setSaved(false); }}>עדכון הדירוג</button>}
             {data.previewOnly && <button className="btn" style={{ marginTop: 20 }} onClick={() => { setStep(1); setSaved(false); }}>חזרה לתצוגת הדירוג</button>}
           </section>}
