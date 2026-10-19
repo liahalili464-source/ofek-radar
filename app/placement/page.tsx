@@ -1,7 +1,7 @@
 "use client";
 
 import * as XLSX from "xlsx";
-import { ClipboardCopy, Download, Search, Sparkles, Star } from "lucide-react";
+import { ChevronDown, ChevronUp, ClipboardCopy, Download, Search, Sparkles, Star } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { AppShell } from "@/components/app-shell";
 import { createSupabaseBrowserClient } from "@/lib/supabase-client";
@@ -87,6 +87,7 @@ export default function PlacementPage() {
   const [savingId, setSavingId] = useState<string | null>(null);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+  const [expandedCandidate, setExpandedCandidate] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -344,71 +345,60 @@ export default function PlacementPage() {
         </div>
       </section>
 
-      <div style={{ display: "grid", gridTemplateColumns: "minmax(0,1.65fr) minmax(330px,.75fr)", gap: 18, alignItems: "start", minWidth: 0 }}>
-        <section className="card flush" style={{ minWidth: 0 }}>
-          <div className="row between wrap" style={{ padding: "20px 20px 10px" }}>
-            <div><h2 className="section-title" style={{ marginBottom: 3 }}>מועמדים לשיבוץ</h2><div className="stat-label">{loading ? "טוען..." : `${filtered.length} מועמדים מוצגים`}</div></div>
-            {currentCycle && <span className="badge">{currentCycle.name}</span>}
-          </div>
-          <div className="table-wrap">
-            <table className="table" style={{ minWidth: 1280 }}>
-              <thead><tr><th>מועמד/ת</th><th>ראיונות</th><th>דירוג החייל</th><th>דירוגי היחידות</th><th>ממוצע</th><th>העדפה ניהולית</th><th>הצעה</th><th>שיבוץ סופי</th><th></th></tr></thead>
-              <tbody>
-                {loading && <tr><td colSpan={9}>טוען...</td></tr>}
-                {!loading && filtered.map((candidate) => {
-                  const priority = priorities[candidate.id];
-                  const suggestion = suggestedUnit(candidate);
-                  const placementChanged = (draftPlacement[candidate.id] || "") !== (candidate.targetUnitId || "");
-                  return <tr key={candidate.id}>
+      <section className="card flush" style={{ minWidth: 0 }}>
+        <div className="row between wrap" style={{ padding: "20px 20px 10px" }}>
+          <div><h2 className="section-title" style={{ marginBottom: 3 }}>מועמדים לשיבוץ</h2><div className="stat-label">{loading ? "טוען..." : `${filtered.length} מועמדים מוצגים · לחצי על פירוט כדי לראות את כל ציוני היחידות`}</div></div>
+          {currentCycle && <span className="badge">{currentCycle.name}</span>}
+        </div>
+        <div className="table-wrap">
+          <table className="table" style={{ minWidth: 980 }}>
+            <thead><tr><th>מועמד/ת</th><th>ראיונות</th><th>דירוג החייל</th><th>תמונת יחידות</th><th>העדפה ניהולית</th><th>שיבוץ</th><th></th></tr></thead>
+            <tbody>
+              {loading && <tr><td colSpan={7}>טוען...</td></tr>}
+              {!loading && filtered.map((candidate) => {
+                const priority = priorities[candidate.id];
+                const suggestion = suggestedUnit(candidate);
+                const placementChanged = (draftPlacement[candidate.id] || "") !== (candidate.targetUnitId || "");
+                const expanded = expandedCandidate === candidate.id;
+                const scoredUnits = units.filter((unit) => candidate.unitScores[unit.id] != null).sort((a, b) => (candidate.unitScores[b.id] || 0) - (candidate.unitScores[a.id] || 0));
+                const topUnit = scoredUnits[0];
+                return <>
+                  <tr key={candidate.id}>
                     <td><div className="row" style={{ gap: 7 }}>{priority?.starred && <Star size={15} fill="currentColor" style={{ color: "var(--warning)", flex: "0 0 auto" }} />}<div><b>{candidate.fullName}</b><div className="stat-label" dir="ltr" style={{ textAlign: "right" }}>{candidate.phone || candidate.city || ""}</div></div></div></td>
                     <td><span className={`badge ${candidate.ready ? "ok" : ""}`}>{candidate.completedInterviews}/{candidate.totalInterviews || "—"}</span></td>
-                    <td>{candidate.preferences.length ? <div className="row wrap" style={{ gap: 5 }}>{candidate.preferences.slice(0, 3).map((unitId, index) => <span className="badge" key={`${unitId}-${index}`}>{index + 1}. {unitNameById.get(unitId) || "יחידה"}</span>)}</div> : <span className="stat-label">טרם מולא</span>}</td>
-                    <td>{Object.keys(candidate.unitScores).length ? <div style={{ display: "grid", gap: 4 }}>{units.filter((unit) => candidate.unitScores[unit.id] != null).sort((a, b) => (candidate.unitScores[b.id] || 0) - (candidate.unitScores[a.id] || 0)).map((unit) => <div className="row between" key={unit.id} style={{ gap: 8, minWidth: 145 }}><span className="stat-label">{unit.name}</span><span className="badge">{candidate.unitScores[unit.id].toFixed(1)}/5</span></div>)}</div> : <span className="stat-label">טרם דורג</span>}</td>
-                    <td>{candidate.averageScore == null ? <span className="stat-label">—</span> : <b>{candidate.averageScore.toFixed(1)}</b>}</td>
+                    <td>{candidate.preferences.length ? <div style={{ display: "grid", gap: 4 }}>{candidate.preferences.slice(0, 3).map((unitId, index) => <span key={`${unitId}-${index}`}><b>{index + 1}</b> · {unitNameById.get(unitId) || "יחידה"}</span>)}</div> : <span className="stat-label">טרם מולא</span>}</td>
+                    <td>{topUnit ? <div><b>{topUnit.name} · {candidate.unitScores[topUnit.id].toFixed(1)}/5</b><div className="stat-label">ממוצע כללי {candidate.averageScore?.toFixed(1) || "—"} · {scoredUnits.length} יחידות דירגו</div></div> : <span className="stat-label">טרם דורג</span>}</td>
                     <td>{priority?.starred ? <div><b>{priority.unitId ? unitNameById.get(priority.unitId) || "העדפה ניהולית" : "מסומן בעדיפות"}</b>{priority.note && <div className="stat-label" style={{ maxWidth: 180 }}>{priority.note}</div>}</div> : <span className="stat-label">—</span>}</td>
-                    <td>{suggestion ? <button className="btn btn-small" type="button" onClick={() => acceptSuggestion(candidate)}><Sparkles size={14} /> {unitNameById.get(suggestion)}</button> : <span className="stat-label">—</span>}</td>
-                    <td><select className="select" style={{ minWidth: 150 }} value={draftPlacement[candidate.id] || ""} onChange={(e) => setDraftPlacement((current) => ({ ...current, [candidate.id]: e.target.value }))}><option value="">טרם שובץ</option>{units.map((unit) => <option key={unit.id} value={unit.id}>{unit.name}</option>)}</select></td>
-                    <td><button className="btn btn-small btn-primary" disabled={!placementChanged || savingId === candidate.id} onClick={() => savePlacement(candidate)}>{savingId === candidate.id ? "שומר..." : "שמור"}</button></td>
-                  </tr>;
-                })}
-                {!loading && filtered.length === 0 && <tr><td colSpan={9}><div className="empty">אין מועמדים שמתאימים לסינון.</div></td></tr>}
-              </tbody>
-            </table>
-          </div>
-        </section>
-
-        <div style={{ display: "grid", gap: 18, minWidth: 0 }}>
-          <section className="card">
-            <div className="row between" style={{ marginBottom: 14 }}><h2 className="section-title" style={{ margin: 0 }}>יחידות והקצאות</h2><span className="badge">{units.length} יחידות</span></div>
-            <div style={{ display: "grid", gap: 10 }}>
-              {units.map((unit) => {
-                const assignedToUnit = candidates.filter((candidate) => candidate.targetUnitId === unit.id);
-                const defined = hasDefinedAllocation(unit.id);
-                const allocation = allocations[unit.id] || 0;
-                const remaining = defined ? allocation - assignedToUnit.length : null;
-                return <div className="notice" key={unit.id} style={{ padding: 13 }}>
-                  <div className="row between"><b>{unit.name}</b>{defined ? <span className={`badge ${remaining != null && remaining < 0 ? "danger" : remaining === 0 ? "warn" : "ok"}`}>{remaining != null && remaining < 0 ? `${Math.abs(remaining)} מעל ההקצאה` : `${remaining} נותרו`}</span> : <span className="badge">ללא הקצאה</span>}</div>
-                  <div className="row" style={{ marginTop: 8, gap: 18 }}><span className="stat-label">שובצו <b style={{ color: "var(--text)" }}>{assignedToUnit.length}</b></span><span className="stat-label">הקצאות <b style={{ color: "var(--text)" }}>{defined ? allocation : "—"}</b></span></div>
-                  {assignedToUnit.length > 0 && <div className="stat-label" style={{ marginTop: 8 }}>{assignedToUnit.slice(0, 4).map((candidate) => candidate.fullName).join(" · ")}{assignedToUnit.length > 4 ? ` · ועוד ${assignedToUnit.length - 4}` : ""}</div>}
-                </div>;
+                    <td><div style={{ display: "grid", gap: 6, minWidth: 170 }}>{suggestion && <button className="btn btn-small" type="button" onClick={() => acceptSuggestion(candidate)}><Sparkles size={14} /> הצעה: {unitNameById.get(suggestion)}</button>}<select className="select" value={draftPlacement[candidate.id] || ""} onChange={(e) => setDraftPlacement((current) => ({ ...current, [candidate.id]: e.target.value }))}><option value="">טרם שובץ</option>{units.map((unit) => <option key={unit.id} value={unit.id}>{unit.name}</option>)}</select></div></td>
+                    <td><div style={{ display: "grid", gap: 6 }}><button className="btn btn-small btn-primary" disabled={!placementChanged || savingId === candidate.id} onClick={() => savePlacement(candidate)}>{savingId === candidate.id ? "שומר..." : "שמור"}</button><button className="btn btn-small" type="button" onClick={() => setExpandedCandidate(expanded ? null : candidate.id)}>{expanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />} פירוט</button></div></td>
+                  </tr>
+                  {expanded && <tr key={`${candidate.id}-details`}><td colSpan={7} style={{ padding: 0 }}><div style={{ padding: "16px 20px 20px", background: "rgba(255,255,255,.018)", display: "grid", gridTemplateColumns: "minmax(220px,.8fr) minmax(360px,1.4fr)", gap: 18 }}>
+                    <div><div className="stat-label" style={{ marginBottom: 8 }}>דירוג החייל</div><div style={{ display: "grid", gap: 7 }}>{candidate.preferences.slice(0, 3).map((unitId, index) => <div className="notice" key={unitId} style={{ padding: 9 }}><b>{index + 1}. {unitNameById.get(unitId) || "יחידה"}</b></div>)}{!candidate.preferences.length && <span className="stat-label">טרם מולא</span>}</div></div>
+                    <div><div className="stat-label" style={{ marginBottom: 8 }}>איך היחידות דירגו את המועמד/ת</div><div className="grid grid-2">{scoredUnits.map((unit) => <div className="notice" key={unit.id} style={{ padding: 10 }}><div className="row between"><b>{unit.name}</b><span className="badge">{candidate.unitScores[unit.id].toFixed(1)}/5</span></div><div className="stat-label" style={{ marginTop: 5 }}>{candidate.unitRecommendations[unit.id] ? ({ strong_yes: "מומלץ מאוד", yes: "מומלץ", maybe: "מתלבט/ת", no: "לא מומלץ" } as Record<string,string>)[candidate.unitRecommendations[unit.id]] || candidate.unitRecommendations[unit.id] : "ללא המלצה מסכמת"}</div></div>)}{!scoredUnits.length && <span className="stat-label">אין עדיין ציוני יחידות.</span>}</div></div>
+                  </div></td></tr>}
+                </>;
               })}
-              {!units.length && !loading && <div className="empty">לא הוגדרו יחידות למחזור.</div>}
-            </div>
-          </section>
-
-          <section className="card">
-            <div className="row" style={{ marginBottom: 14 }}><Sparkles size={18} className="accent" /><h2 className="section-title" style={{ margin: 0 }}>הצעות לשיבוץ</h2></div>
-            <div className="stat-label" style={{ marginBottom: 12 }}>הצעה בלבד. השיבוץ לא נשמר עד ללחיצה על „שמור” בטבלה.</div>
-            <div style={{ display: "grid", gap: 8 }}>
-              {suggestions.map((candidate) => {
-                const unitId = suggestedUnit(candidate);
-                return <div className="notice" key={candidate.id}><div className="row between wrap"><div><b>{candidate.fullName}</b><div className="stat-label">{unitNameById.get(unitId) || "יחידה"}</div></div><button className="btn btn-small" onClick={() => acceptSuggestion(candidate)}>בחר הצעה</button></div></div>;
-              })}
-              {!suggestions.length && <div className="empty">אין כרגע הצעות פתוחות.</div>}
-            </div>
-          </section>
+              {!loading && filtered.length === 0 && <tr><td colSpan={7}><div className="empty">אין מועמדים שמתאימים לסינון.</div></td></tr>}
+            </tbody>
+          </table>
         </div>
-      </div>
+      </section>
+
+      <section className="card" style={{ marginTop: 18 }}>
+        <div className="row between wrap" style={{ marginBottom: 14 }}><div><h2 className="section-title" style={{ marginBottom: 3 }}>מצב הקצאות</h2><div className="stat-label">תמונת מצב מהירה לפני קבלת החלטות השיבוץ</div></div><span className="badge">{units.length} יחידות</span></div>
+        <div className="grid grid-4">
+          {units.map((unit) => {
+            const assignedToUnit = candidates.filter((candidate) => candidate.targetUnitId === unit.id);
+            const defined = hasDefinedAllocation(unit.id);
+            const allocation = allocations[unit.id] || 0;
+            const remaining = defined ? allocation - assignedToUnit.length : null;
+            return <div className="notice" key={unit.id} style={{ padding: 13 }}>
+              <div className="row between"><b>{unit.name}</b>{defined ? <span className={`badge ${remaining != null && remaining < 0 ? "danger" : remaining === 0 ? "warn" : "ok"}`}>{remaining != null && remaining < 0 ? `${Math.abs(remaining)} מעל` : `${remaining} נותרו`}</span> : <span className="badge">ללא הקצאה</span>}</div>
+              <div className="stat-label" style={{ marginTop: 8 }}>שובצו <b style={{ color: "var(--text)" }}>{assignedToUnit.length}</b>{defined ? <> מתוך <b style={{ color: "var(--text)" }}>{allocation}</b></> : null}</div>
+            </div>;
+          })}
+        </div>
+      </section>
     </AppShell>
   );
 }
