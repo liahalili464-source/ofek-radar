@@ -30,6 +30,7 @@ type CandidateView = {
   preferences: string[];
   averageScore: number | null;
   unitScores: Record<string, number>;
+  unitRecommendations: Record<string, string>;
   completedInterviews: number;
   totalInterviews: number;
   ready: boolean;
@@ -147,10 +148,12 @@ export default function PlacementPage() {
         const completed = candidateInterviews.filter((interview) => interview.status === "completed");
         const scoreValues: number[] = [];
         const scoresByUnit = new Map<string, number[]>();
+        const recommendationsByUnit = new Map<string, string>();
 
         for (const interview of completed) {
           const evaluation = evalByInterview.get(interview.id);
           if (!evaluation) continue;
+          if (evaluation.recommendation) recommendationsByUnit.set(interview.unit_id, evaluation.recommendation);
           const parts = [evaluation.professional_score, evaluation.personal_score].filter((score): score is number => typeof score === "number");
           if (!parts.length) continue;
           const score = parts.reduce((sum, item) => sum + item, 0) / parts.length;
@@ -161,6 +164,7 @@ export default function PlacementPage() {
         const unitScores: Record<string, number> = {};
         for (const [unitId, scores] of scoresByUnit.entries()) unitScores[unitId] = scores.reduce((sum, item) => sum + item, 0) / scores.length;
         const averageScore = scoreValues.length ? scoreValues.reduce((sum, item) => sum + item, 0) / scoreValues.length : null;
+        const unitRecommendations = Object.fromEntries(recommendationsByUnit.entries());
 
         return [{
           id: candidate.id,
@@ -172,6 +176,7 @@ export default function PlacementPage() {
           preferences: extractRankings(responseByCandidate.get(candidate.id)),
           averageScore,
           unitScores,
+          unitRecommendations,
           completedInterviews: completed.length,
           totalInterviews: candidateInterviews.length,
           ready: candidateInterviews.length > 0 && completed.length === candidateInterviews.length,
@@ -268,6 +273,7 @@ export default function PlacementPage() {
       "עדיפות 2": candidate.preferences[1] ? unitNameById.get(candidate.preferences[1]) || "" : "",
       "עדיפות 3": candidate.preferences[2] ? unitNameById.get(candidate.preferences[2]) || "" : "",
       "ממוצע ראיונות": candidate.averageScore == null ? "" : Number(candidate.averageScore.toFixed(2)),
+      ...Object.fromEntries(units.map((unit) => [`דירוג ${unit.name}`, candidate.unitScores[unit.id] == null ? "" : Number(candidate.unitScores[unit.id].toFixed(1))])),
       "העדפה ניהולית": priorities[candidate.id]?.unitId ? unitNameById.get(priorities[candidate.id].unitId || "") || "" : "",
       "הערת מנהל": priorities[candidate.id]?.note || "",
     }));
@@ -345,10 +351,10 @@ export default function PlacementPage() {
             {currentCycle && <span className="badge">{currentCycle.name}</span>}
           </div>
           <div className="table-wrap">
-            <table className="table" style={{ minWidth: 1120 }}>
-              <thead><tr><th>מועמד/ת</th><th>ראיונות</th><th>דירוג יחידות</th><th>ממוצע</th><th>העדפה ניהולית</th><th>הצעה</th><th>שיבוץ סופי</th><th></th></tr></thead>
+            <table className="table" style={{ minWidth: 1280 }}>
+              <thead><tr><th>מועמד/ת</th><th>ראיונות</th><th>דירוג החייל</th><th>דירוגי היחידות</th><th>ממוצע</th><th>העדפה ניהולית</th><th>הצעה</th><th>שיבוץ סופי</th><th></th></tr></thead>
               <tbody>
-                {loading && <tr><td colSpan={8}>טוען...</td></tr>}
+                {loading && <tr><td colSpan={9}>טוען...</td></tr>}
                 {!loading && filtered.map((candidate) => {
                   const priority = priorities[candidate.id];
                   const suggestion = suggestedUnit(candidate);
@@ -357,6 +363,7 @@ export default function PlacementPage() {
                     <td><div className="row" style={{ gap: 7 }}>{priority?.starred && <Star size={15} fill="currentColor" style={{ color: "var(--warning)", flex: "0 0 auto" }} />}<div><b>{candidate.fullName}</b><div className="stat-label" dir="ltr" style={{ textAlign: "right" }}>{candidate.phone || candidate.city || ""}</div></div></div></td>
                     <td><span className={`badge ${candidate.ready ? "ok" : ""}`}>{candidate.completedInterviews}/{candidate.totalInterviews || "—"}</span></td>
                     <td>{candidate.preferences.length ? <div className="row wrap" style={{ gap: 5 }}>{candidate.preferences.slice(0, 3).map((unitId, index) => <span className="badge" key={`${unitId}-${index}`}>{index + 1}. {unitNameById.get(unitId) || "יחידה"}</span>)}</div> : <span className="stat-label">טרם מולא</span>}</td>
+                    <td>{Object.keys(candidate.unitScores).length ? <div style={{ display: "grid", gap: 4 }}>{units.filter((unit) => candidate.unitScores[unit.id] != null).sort((a, b) => (candidate.unitScores[b.id] || 0) - (candidate.unitScores[a.id] || 0)).map((unit) => <div className="row between" key={unit.id} style={{ gap: 8, minWidth: 145 }}><span className="stat-label">{unit.name}</span><span className="badge">{candidate.unitScores[unit.id].toFixed(1)}/5</span></div>)}</div> : <span className="stat-label">טרם דורג</span>}</td>
                     <td>{candidate.averageScore == null ? <span className="stat-label">—</span> : <b>{candidate.averageScore.toFixed(1)}</b>}</td>
                     <td>{priority?.starred ? <div><b>{priority.unitId ? unitNameById.get(priority.unitId) || "העדפה ניהולית" : "מסומן בעדיפות"}</b>{priority.note && <div className="stat-label" style={{ maxWidth: 180 }}>{priority.note}</div>}</div> : <span className="stat-label">—</span>}</td>
                     <td>{suggestion ? <button className="btn btn-small" type="button" onClick={() => acceptSuggestion(candidate)}><Sparkles size={14} /> {unitNameById.get(suggestion)}</button> : <span className="stat-label">—</span>}</td>
@@ -364,7 +371,7 @@ export default function PlacementPage() {
                     <td><button className="btn btn-small btn-primary" disabled={!placementChanged || savingId === candidate.id} onClick={() => savePlacement(candidate)}>{savingId === candidate.id ? "שומר..." : "שמור"}</button></td>
                   </tr>;
                 })}
-                {!loading && filtered.length === 0 && <tr><td colSpan={8}><div className="empty">אין מועמדים שמתאימים לסינון.</div></td></tr>}
+                {!loading && filtered.length === 0 && <tr><td colSpan={9}><div className="empty">אין מועמדים שמתאימים לסינון.</div></td></tr>}
               </tbody>
             </table>
           </div>
